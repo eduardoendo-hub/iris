@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 
 const PUBLIC_ROUTES = ["/login", "/api/auth", "/api/health"];
 
+// Preview mode: bypass auth entirely. Used during initial deploy
+// while Google OAuth credentials and real data sources aren't ready yet.
+// Disable in production by removing IRIS_PUBLIC_PREVIEW from env.
+const PUBLIC_PREVIEW = process.env.IRIS_PUBLIC_PREVIEW === "true";
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
@@ -15,6 +20,10 @@ export default auth((req) => {
     if (secret !== process.env.CRON_SECRET) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+    return NextResponse.next();
+  }
+
+  if (PUBLIC_PREVIEW) {
     return NextResponse.next();
   }
 
