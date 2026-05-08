@@ -1,65 +1,84 @@
-import Image from "next/image";
+import { Topbar } from "@/components/Topbar";
+import { KPICard } from "@/components/KPICard";
+import { ChannelTable } from "@/components/ChannelTable";
+import { CTAPositionTable } from "@/components/CTAPositionTable";
+import { InsightItem } from "@/components/InsightItem";
+import {
+  MOCK_PRODUCTS,
+  MOCK_KPIS,
+  MOCK_CHANNELS,
+  MOCK_CTA_POSITION,
+  MOCK_INSIGHTS,
+} from "@/lib/mock-data";
 
-export default function Home() {
+type SearchParams = { product?: string };
+
+export default async function CockpitPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const slug = params.product ?? "direito5";
+  const productKey = slug as keyof typeof MOCK_KPIS;
+
+  const kpi = MOCK_KPIS[productKey] ?? MOCK_KPIS.direito5;
+  const channels = MOCK_CHANNELS[productKey] ?? [];
+  const ctaPositions = MOCK_CTA_POSITION[productKey] ?? [];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen flex flex-col">
+      <Topbar productSlug={slug} products={[...MOCK_PRODUCTS]} />
+
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-8 flex flex-col gap-6">
+        <MockBanner />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard label="Visitas (7d)"     value={kpi.sessions}   delta={kpi.sessionsDelta}   format="number" />
+          <KPICard label="Cliques no CTA"   value={kpi.ctaClicks}  delta={kpi.ctaClicksDelta}  format="number" />
+          <KPICard label="Taxa de conversão" value={kpi.ctr}       delta={kpi.ctrDelta}        format="percent" hint="cliques / visitas" />
+          <KPICard label="Investimento (7d)" value={kpi.cost}      delta={kpi.costDelta}       format="currency" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <ChannelTable rows={[...channels]} />
+            <CTAPositionTable rows={[...ctaPositions]} />
+          </div>
+
+          <aside className="flex flex-col gap-3">
+            <h3 className="px-1" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", color: "var(--fg2)", fontWeight: 700 }}>
+              Insights
+            </h3>
+            {MOCK_INSIGHTS.map((i) => (
+              <InsightItem key={i.id} {...i} />
+            ))}
+          </aside>
         </div>
       </main>
+
+      <footer className="px-6 py-4 text-center" style={{ color: "var(--fg2)", fontSize: 11 }}>
+        IRIS v0.1 · TechNow Hub · {new Date().getFullYear()}
+      </footer>
+    </div>
+  );
+}
+
+function MockBanner() {
+  return (
+    <div
+      className="rounded-md px-4 py-2 flex items-center gap-3"
+      style={{
+        background: "var(--status-warn-bg)",
+        border: "1px solid var(--status-warn)",
+        fontSize: 12,
+        color: "var(--fg1)",
+      }}
+    >
+      <span style={{ fontWeight: 700, color: "var(--status-warn)", textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", fontSize: 10 }}>
+        Mock
+      </span>
+      <span>Dados simulados. Conector GA4 + Google Ads entra após service account JSON e dev token.</span>
     </div>
   );
 }

@@ -1,0 +1,35 @@
+/* ============================================================
+   IRIS — Extensions on top of TechNow tokens
+   Severity scale + cockpit-specific tokens.
+   ============================================================ */
+
+:root {
+  /* ---------- SEVERITY ---------- */
+  --status-info:     var(--tn-tiffany);     /* INFO   — informativo neutro */
+  --status-warn:     var(--tn-gold);        /* WARN   — vale checar essa semana */
+  --status-high:     #F49B0A;               /* HIGH   — ação em ≤48h */
+  --status-critical: var(--tn-rose);        /* CRITICAL — ação agora */
+  --status-success:  var(--tn-go-green);    /* meta batida, métrica positiva */
+
+  --status-info-bg:     rgba(10, 186, 181, 0.10);
+  --status-warn-bg:     rgba(247, 201, 72, 0.10);
+  --status-high-bg:     rgba(244, 155, 10, 0.10);
+  --status-critical-bg: rgba(236, 96, 136, 0.10);
+  --status-success-bg:  rgba(48, 209, 88, 0.10);
+
+  /* ---------- COCKPIT SURFACES ---------- */
+  --cockpit-bg:        var(--bg);
+  --cockpit-card:      rgba(255, 255, 255, 0.02);
+  --cockpit-card-strong: rgba(255, 255, 255, 0.04);
+  --cockpit-border:    rgba(255, 255, 255, 0.06);
+  --cockpit-border-strong: rgba(255, 255, 255, 0.10);
+
+  /* ---------- DELTA INDICATORS ---------- */
+  --delta-up:   var(--tn-go-green);
+  --delta-down: var(--tn-rose);
+  --delta-flat: var(--tn-pearl-9ABABA);
+
+  /* ---------- LIVE BADGE ---------- */
+  --live-pulse-color: var(--tn-go-green);
+  --live-stale-color: var(--tn-gold);
+}

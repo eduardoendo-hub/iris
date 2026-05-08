@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// PRODUCT — uma LP/produto monitorado pelo IRIS
+// ============================================================
+model Product {
+  id                  String   @id @default(cuid())
+  slug                String   @unique
+  name                String
+  url                 String
+
+  // External IDs
+  ga4PropertyId       String
+  googleAdsCustomerId String?
+  metaAdAccountId     String?
+  symplaEventId       String?
+  gscSiteUrl          String?
+
+  // UTM
+  utmCampaignPrefix   String
+
+  // Meta
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  snapshots           Snapshot[]
+  insights            Insight[]
+
+  @@index([slug])
+}
+
+// ============================================================
+// SNAPSHOT — foto agregada de métricas num bucket de tempo
+// ============================================================
+model Snapshot {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  bucket      Bucket
+  startsAt    DateTime
+  source      Source
+  channel     String?
+  ctaPosition String?
+
+  sessions    Int?
+  users       Int?
+  pageviews   Int?
+  cost        Decimal? @db.Decimal(10, 2)
+  clicks      Int?
+  ctaClicks   Int?
+  impressions Int?
+  conversions Int?
+  ctr         Decimal? @db.Decimal(5, 4)
+  cpc         Decimal? @db.Decimal(8, 2)
+  cpm         Decimal? @db.Decimal(8, 2)
+
+  rawJson     Json
+
+  createdAt   DateTime @default(now())
+
+  @@unique([productId, bucket, startsAt, source, channel, ctaPosition])
+  @@index([productId, startsAt, source])
+}
+
+enum Bucket {
+  HOUR
+  DAY
+}
+
+enum Source {
+  GA4
+  GOOGLE_ADS
+  META_ADS
+  SYMPLA
+  GSC
+}
+
+// ============================================================
+// INSIGHT — output da camada AI
+// ============================================================
+model Insight {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  generatedAt     DateTime @default(now())
+  severity        Severity
+  category        Category
+  title           String
+  body            String   @db.Text
+  recommendation  String?  @db.Text
+
+  metricsRefs     Json
+  contextHash     String   @unique
+
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+
+  pushSentAt      DateTime?
+  emailSentAt     DateTime?
+
+  @@index([productId, generatedAt])
+}
+
+enum Severity {
+  INFO
+  WARN
+  HIGH
+  CRITICAL
+}
+
+enum Category {
+  ANOMALY
+  OPPORTUNITY
+  SUMMARY
+  FORECAST
+}
+
+// ============================================================
+// AUTH — NextAuth (Auth.js v5) tables
+// ============================================================
+model User {
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  name                String?
+  image               String?
+  emailVerified       DateTime?
+  role                Role     @default(VIEWER)
+
+  notifyByEmail       Boolean  @default(true)
+  notifyByWebPush     Boolean  @default(true)
+  notifyByWhatsApp    Boolean  @default(false)
+  whatsappNumber      String?
+
+  createdAt           DateTime @default(now())
+  lastSeenAt          DateTime @default(now())
+
+  accounts            Account[]
+  sessions            Session[]
+  pushSubscriptions   PushSubscription[]
+}
+
+enum Role {
+  VIEWER
+  OPERATOR
+  ADMIN
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?  @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================
+// PUSH — Web Push subscriptions
+// ============================================================
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastUsed  DateTime @default(now())
+
+  @@index([userId])
+}

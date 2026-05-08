@@ -1,0 +1,87 @@
+/* ============================================================
+   TECH NOW — COLORS & TYPE
+   Imported from technow-social-engine/design-system/tech_now_design_system.
+   Single source of truth — do NOT edit here. Sync from upstream.
+   ============================================================ */
+
+:root {
+  /* ---------- COLOR — CORE PALETTE ---------- */
+  --tn-deep-teal:     #080F0F;
+  --tn-surface:       #0F2020;
+  --tn-surface-2:     #06100F;
+  --tn-muted:         #1A3535;
+  --tn-muted-2:       #2A4040;
+  --tn-pearl:         #EDF4F4;
+  --tn-pearl-9ABABA:  #9ABABA;
+
+  --tn-tiffany:       #0ABAB5;
+  --tn-tiffany-light: #81D8D0;
+  --tn-tiffany-dark:  #057572;
+  --tn-tiffany-deep:  #04201F;
+
+  --tn-rose:          #EC6088;
+  --tn-gold:          #F7C948;
+  --tn-go-green:      #30D158;
+  --tn-error:         #EC6088;
+
+  /* ---------- COLOR — SEMANTIC TOKENS (DARK = DEFAULT) ---------- */
+  --bg:               var(--tn-deep-teal);
+  --bg-surface:       var(--tn-surface);
+  --bg-surface-2:     var(--tn-surface-2);
+
+  --fg1:              var(--tn-pearl);
+  --fg2:              var(--tn-muted);
+  --fg3:              var(--tn-muted-2);
+  --fg-on-brand:      var(--tn-deep-teal);
+
+  --brand:            var(--tn-tiffany);
+  --brand-soft:       var(--tn-tiffany-light);
+  --accent:           var(--tn-rose);
+
+  --border:           var(--tn-surface);
+  --border-strong:    var(--tn-muted);
+
+  /* ---------- GRADIENTS ---------- */
+  --grad-duo:    linear-gradient(90deg, #0ABAB5 0%, #81D8D0 40%, #EC6088 100%);
+  --grad-brand:  linear-gradient(90deg, #04201F 0%, #0ABAB5 50%, #81D8D0 100%);
+  --grad-alert:  linear-gradient(90deg, #F7C948 0%, #EC6088 100%);
+  --grad-line:   linear-gradient(90deg, transparent 0%, #0ABAB5 30%, #81D8D0 50%, #EC6088 70%, transparent 100%);
+
+  /* ---------- GLOWS ---------- */
+  --glow-tiffany: 0 0 24px rgba(10, 186, 181, 0.30);
+  --glow-rose:    0 0 12px rgba(236, 96, 136, 0.70);
+  --shadow-1:     0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-2:     0 6px 24px rgba(0, 0, 0, 0.40);
+  --shadow-card:  0 2px 0 rgba(0,0,0,0.20), 0 18px 48px -16px rgba(0,0,0,0.55);
+
+  --spot-tiffany: radial-gradient(circle, rgba(10,186,181,0.14) 0%, transparent 65%);
+  --spot-rose:    radial-gradient(circle, rgba(236,96,136,0.09) 0%, transparent 65%);
+
+  /* ---------- RADII ---------- */
+  --radius-xs:  3px;
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  18px;
+  --radius-2xl: 24px;
+  --radius-pill: 999px;
+
+  /* ---------- SPACING ---------- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px; --s-5: 20px;
+  --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 48px; --s-10: 64px; --s-11: 80px;
+
+  /* ---------- TYPOGRAPHY ---------- */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fw-regular: 400; --fw-medium: 500; --fw-semi: 600;
+  --fw-bold: 700;    --fw-heavy: 800; --fw-black: 900;
+
+  --fs-display: 48px; --fs-h1: 36px; --fs-h2: 28px;
+  --fs-h3: 22px;      --fs-h4: 18px; --fs-body: 14px;
+  --fs-small: 12px;   --fs-caption: 10px; --fs-eyebrow: 10px;
+
+  --lh-tight: 1.05; --lh-snug: 1.2; --lh-normal: 1.5; --lh-loose: 1.7;
+  --ls-tight: -0.04em; --ls-headline: -0.02em; --ls-normal: 0em;
+  --ls-eyebrow: 0.25em; --ls-drops: 0.35em;
+}

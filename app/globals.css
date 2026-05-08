@@ -1,26 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "./styles/technow-tokens.css";
+@import "./styles/iris-tokens.css";
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-surface-2: var(--bg-surface-2);
+  --color-fg1: var(--fg1);
+  --color-fg2: var(--fg2);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-status-info: var(--status-info);
+  --color-status-warn: var(--status-warn);
+  --color-status-high: var(--status-high);
+  --color-status-critical: var(--status-critical);
+  --color-status-success: var(--status-success);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html, body {
+  background: var(--bg);
+  color: var(--fg1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1 { font-weight: var(--fw-black); font-size: var(--fs-h1); letter-spacing: var(--ls-headline); line-height: var(--lh-tight); }
+h2 { font-weight: var(--fw-heavy); font-size: var(--fs-h2); letter-spacing: var(--ls-headline); line-height: var(--lh-snug); }
+h3 { font-weight: var(--fw-bold);  font-size: var(--fs-h3); letter-spacing: var(--ls-headline); line-height: var(--lh-snug); }
+h4 { font-weight: var(--fw-bold);  font-size: var(--fs-h4); line-height: var(--lh-snug); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
