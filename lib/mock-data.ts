@@ -2,8 +2,9 @@
 // Removido em D1.h quando dados reais começam a popular o Postgres.
 
 export const MOCK_PRODUCTS = [
-  { slug: "direito5", name: "Direito 5.0", url: "https://direito5.technowhub.ai" },
-  { slug: "peopleai", name: "People AI Lab", url: "https://peopleai.technowhub.ai" },
+  { slug: "direito5",   name: "Direito 5.0",      url: "https://direito5.technowhub.ai" },
+  { slug: "peopleai",   name: "People AI Lab",    url: "https://peopleai.technowhub.ai" },
+  { slug: "claude-pro", name: "Curso Claude Pro", url: "https://impacta.com.br/claude" },
 ];
 
 export const MOCK_KPIS = {
@@ -19,6 +20,17 @@ export const MOCK_KPIS = {
     ctr: 7.99,       ctrDelta: 7.8,
     cost: 920,       costDelta: -1.5,
   },
+  // Curso Claude Pro — campanha 11/05 → 06/06/2026
+  // Valores iniciais zerados; dashboard receberá dados reais via:
+  //   1. Webhooks de integracao-rd → /api/webhook/rd (Lead criado, Click WhatsApp)
+  //   2. Cron de ingestão Meta Ads + Google Ads + GA4 (a partir de 11/05)
+  // Meta da campanha: 30 matrículas, R$ 9.000 mídia, CAC máx R$ 300, ROAS 5x.
+  "claude-pro": {
+    sessions: 0,      sessionsDelta: null,
+    ctaClicks: 0,     ctaClicksDelta: null,
+    ctr: 0,           ctrDelta: null,
+    cost: 0,          costDelta: null,
+  },
 } as const;
 
 export const MOCK_CHANNELS = {
@@ -33,6 +45,13 @@ export const MOCK_CHANNELS = {
     { channel: "linkedin / cpc", cost: 380, sessions: 620,  ctaClicks: 51, cpc: 7.45 },
     { channel: "(direct) / (none)", cost: null, sessions: 230, ctaClicks: 18, cpc: null },
     { channel: "google / organic", cost: null, sessions: 154, ctaClicks: 8,  cpc: null },
+  ],
+  "claude-pro": [
+    // Aguardando primeiros dados reais a partir de 11/05/2026.
+    { channel: "google / cpc",        cost: 0, sessions: 0, ctaClicks: 0, cpc: null },
+    { channel: "meta / cpc",          cost: 0, sessions: 0, ctaClicks: 0, cpc: null },
+    { channel: "(direct) / (none)",   cost: null, sessions: 0, ctaClicks: 0, cpc: null },
+    { channel: "google / organic",    cost: null, sessions: 0, ctaClicks: 0, cpc: null },
   ],
 } as const;
 
@@ -50,6 +69,13 @@ export const MOCK_CTA_POSITION = {
     { position: "header", clicks: 27 },
     { position: "info",   clicks: 9  },
     { position: "footer", clicks: 3  },
+  ],
+  "claude-pro": [
+    { position: "hero",   clicks: 0 },
+    { position: "final",  clicks: 0 },
+    { position: "header", clicks: 0 },
+    { position: "info",   clicks: 0 },
+    { position: "footer", clicks: 0 },
   ],
 } as const;
 

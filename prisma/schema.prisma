@@ -11,10 +11,10 @@ datasource db {
 // PRODUCT — uma LP/produto monitorado pelo IRIS
 // ============================================================
 model Product {
-  id                  String   @id @default(cuid())
-  slug                String   @unique
-  name                String
-  url                 String
+  id   String @id @default(cuid())
+  slug String @unique
+  name String
+  url  String
 
   // External IDs
   ga4PropertyId       String
@@ -24,15 +24,15 @@ model Product {
   gscSiteUrl          String?
 
   // UTM
-  utmCampaignPrefix   String
+  utmCampaignPrefix String
 
   // Meta
-  active              Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  snapshots           Snapshot[]
-  insights            Insight[]
+  snapshots Snapshot[]
+  insights  Insight[]
 
   @@index([slug])
 }
@@ -41,9 +41,9 @@ model Product {
 // SNAPSHOT — foto agregada de métricas num bucket de tempo
 // ============================================================
 model Snapshot {
-  id          String   @id @default(cuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   bucket      Bucket
   startsAt    DateTime
@@ -63,9 +63,9 @@ model Snapshot {
   cpc         Decimal? @db.Decimal(8, 2)
   cpm         Decimal? @db.Decimal(8, 2)
 
-  rawJson     Json
+  rawJson Json
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([productId, bucket, startsAt, source, channel, ctaPosition])
   @@index([productId, startsAt, source])
@@ -82,31 +82,32 @@ enum Source {
   META_ADS
   SYMPLA
   GSC
+  RD_CRM
 }
 
 // ============================================================
 // INSIGHT — output da camada AI
 // ============================================================
 model Insight {
-  id              String   @id @default(cuid())
-  productId       String
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  generatedAt     DateTime @default(now())
-  severity        Severity
-  category        Category
-  title           String
-  body            String   @db.Text
-  recommendation  String?  @db.Text
+  generatedAt    DateTime @default(now())
+  severity       Severity
+  category       Category
+  title          String
+  body           String   @db.Text
+  recommendation String?  @db.Text
 
-  metricsRefs     Json
-  contextHash     String   @unique
+  metricsRefs Json
+  contextHash String @unique
 
-  acknowledgedAt  DateTime?
-  acknowledgedBy  String?
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
 
-  pushSentAt      DateTime?
-  emailSentAt     DateTime?
+  pushSentAt  DateTime?
+  emailSentAt DateTime?
 
   @@index([productId, generatedAt])
 }
@@ -126,27 +127,84 @@ enum Category {
 }
 
 // ============================================================
+// LEAD — captura de leads recebida via webhook do integracao-rd
+// (endpoint: POST /api/webhook/rd)
+// Cada lead representa um envio de formulário "Falar com especialista"
+// ou clique em WhatsApp em qualquer LP cadastrada como Product.
+// ============================================================
+model Lead {
+  id           String    @id @default(cuid())
+  productSlug  String // "claude-pro" — bate com Product.slug
+  campaignSlug String // "claude-pro-maio-2026"
+  eventType    LeadEvent // FORM_SUBMIT | WHATSAPP_CLICK
+
+  name   String?
+  email  String?
+  phone  String?
+  perfil String? // "Gestora", "Analista", etc.
+
+  // UTMs
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+
+  sourcePage String?
+
+  // Refs do RD CRM (preenchidos quando integracao-rd retorna sucesso)
+  rdCrmContactId String?
+  rdCrmDealId    String?
+  rdCrmStatus    String? // "created" | "updated" | "skipped"
+
+  // Status do funil comercial
+  status LeadStatus @default(NEW)
+
+  rawJson    Json // payload bruto do webhook
+  capturedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([productSlug, capturedAt])
+  @@index([campaignSlug])
+  @@index([rdCrmDealId])
+}
+
+enum LeadEvent {
+  FORM_SUBMIT
+  WHATSAPP_CLICK
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CHECKOUT_STARTED
+  WON
+  LOST
+}
+
+// ============================================================
 // AUTH — NextAuth (Auth.js v5) tables
 // ============================================================
 model User {
-  id                  String   @id @default(cuid())
-  email               String   @unique
-  name                String?
-  image               String?
-  emailVerified       DateTime?
-  role                Role     @default(VIEWER)
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  role          Role      @default(VIEWER)
 
-  notifyByEmail       Boolean  @default(true)
-  notifyByWebPush     Boolean  @default(true)
-  notifyByWhatsApp    Boolean  @default(false)
-  whatsappNumber      String?
+  notifyByEmail    Boolean @default(true)
+  notifyByWebPush  Boolean @default(true)
+  notifyByWhatsApp Boolean @default(false)
+  whatsappNumber   String?
 
-  createdAt           DateTime @default(now())
-  lastSeenAt          DateTime @default(now())
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
 
-  accounts            Account[]
-  sessions            Session[]
-  pushSubscriptions   PushSubscription[]
+  accounts          Account[]
+  sessions          Session[]
+  pushSubscriptions PushSubscription[]
 }
 
 enum Role {
@@ -156,17 +214,17 @@ enum Role {
 }
 
 model Account {
-  id                String   @id @default(cuid())
+  id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?  @db.Text
-  access_token      String?  @db.Text
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?  @db.Text
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -195,13 +253,13 @@ model VerificationToken {
 // PUSH — Web Push subscriptions
 // ============================================================
 model PushSubscription {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
+  endpoint String @unique
+  p256dh   String
+  auth     String
 
   userAgent String?
   createdAt DateTime @default(now())
