@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Topbar } from "@/components/Topbar";
 import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
@@ -57,8 +58,20 @@ export default async function CockpitPage({
         </div>
       </main>
 
-      <footer className="px-6 py-4 text-center" style={{ color: "var(--fg2)", fontSize: 11 }}>
-        IRIS v0.1 · TechNow Hub · {new Date().getFullYear()}
+      <footer
+        className="px-6 py-6 flex items-center justify-center gap-3"
+        style={{ color: "var(--fg2)", fontSize: 11, borderTop: "1px solid var(--cockpit-border)", marginTop: 32 }}
+      >
+        <span style={{ letterSpacing: "var(--ls-eyebrow)", textTransform: "uppercase", fontWeight: 600, opacity: 0.7 }}>
+          IRIS v0.1 · {new Date().getFullYear()} · powered by
+        </span>
+        <Image
+          src="/logo-technow.png"
+          alt="Tech Now"
+          width={120}
+          height={26}
+          style={{ height: 22, width: "auto", opacity: 0.85 }}
+        />
       </footer>
     </div>
   );

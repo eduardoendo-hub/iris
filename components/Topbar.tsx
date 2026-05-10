@@ -18,19 +18,14 @@ export function Topbar({ productSlug, products }: {
         <div
           className="rounded-md grid place-items-center"
           style={{
-            width: 32, height: 32,
+            width: 36, height: 36,
             background: "var(--grad-brand)",
             boxShadow: "var(--glow-tiffany)",
           }}
         >
-          <span style={{ fontWeight: 900, fontSize: 14, color: "var(--fg-on-brand)" }}>I</span>
+          <span style={{ fontWeight: 900, fontSize: 16, color: "var(--fg-on-brand)" }}>I</span>
         </div>
-        <div className="flex flex-col leading-tight">
-          <span style={{ fontWeight: 900, fontSize: 14, letterSpacing: "var(--ls-headline)" }}>IRIS</span>
-          <span style={{ fontSize: 10, color: "var(--fg2)", letterSpacing: "var(--ls-eyebrow)", textTransform: "uppercase" }}>
-            TechNow Cockpit
-          </span>
-        </div>
+        <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: "var(--ls-headline)" }}>IRIS</span>
       </Link>
 
       <div className="flex items-center gap-3">
