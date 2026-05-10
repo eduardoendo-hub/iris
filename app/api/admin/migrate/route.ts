@@ -46,12 +46,17 @@ function findMigrationFile(): string | null {
 }
 
 function splitStatements(sql: string): string[] {
-  // Split por ';' final-de-linha. Funciona pra DDL puro (sem stored procedures
-  // com ';' interno). Nossa migration so tem CREATE/ALTER simples — seguro.
-  return sql
-    .split(/;\s*\n/)
+  // 1) Remove linhas de comentario SQL (--...) — Prisma gera "-- CreateTable" antes de cada CREATE
+  const cleaned = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  // 2) Split por ';' (com whitespace/newline opcional). Funciona pra DDL puro
+  //    (sem stored procedures com ';' interno). Nossa migration so tem CREATE/ALTER simples.
+  return cleaned
+    .split(/;\s*(?:\n|$)/)
     .map((s) => s.trim())
-    .filter((s) => s && !s.startsWith("--"));
+    .filter((s) => s.length > 0);
 }
 
 export async function POST(req: NextRequest) {
