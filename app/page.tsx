@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Topbar } from "@/components/Topbar";
 import { ProductSelector } from "@/components/ProductSelector";
+import { TabNav } from "@/components/TabNav";
 import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
@@ -186,6 +187,8 @@ export default async function CockpitPage({
         </span>
         <ProductSelector currentSlug={slug} products={[...MOCK_PRODUCTS]} />
       </div>
+
+      <TabNav active="cockpit" productSlug={slug} />
 
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col gap-8">
         {metricsSourceLabel === "mock" && <MockBanner />}
