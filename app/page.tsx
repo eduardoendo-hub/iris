@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Topbar } from "@/components/Topbar";
+import { ProductSelector } from "@/components/ProductSelector";
 import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
@@ -29,9 +30,27 @@ export default async function CockpitPage({
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Topbar productSlug={slug} products={[...MOCK_PRODUCTS]} />
+      <Topbar />
 
-      <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-8 flex flex-col gap-6">
+      <div
+        className="px-6 py-3 flex items-center gap-3"
+        style={{ borderBottom: "1px solid var(--cockpit-border)" }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            textTransform: "uppercase",
+            letterSpacing: "var(--ls-eyebrow)",
+            color: "var(--fg2)",
+            fontWeight: 700,
+          }}
+        >
+          Produto
+        </span>
+        <ProductSelector currentSlug={slug} products={[...MOCK_PRODUCTS]} />
+      </div>
+
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col gap-6">
         <MockBanner />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
