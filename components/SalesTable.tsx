@@ -75,7 +75,7 @@ export function SalesTable({ sales, totalCount, totalAmount }: {
         <div className="overflow-x-auto">
           <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ color: "var(--fg2)", fontSize: 10, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", fontWeight: 700 }}>
+              <tr style={{ color: "var(--brand-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", fontWeight: 700, opacity: 0.95 }}>
                 <th style={{ textAlign: "left",  padding: "10px 16px" }}>Data</th>
                 <th style={{ textAlign: "left",  padding: "10px 16px" }}>Cliente</th>
                 <th style={{ textAlign: "left",  padding: "10px 16px" }}>Contato</th>

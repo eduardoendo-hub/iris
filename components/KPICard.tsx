@@ -28,7 +28,7 @@ export function KPICard({
     >
       <div
         className="flex items-center gap-2"
-        style={{ color: "var(--fg2)", fontSize: "var(--fs-caption)", textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", fontWeight: 700 }}
+        style={{ color: "var(--brand-soft)", fontSize: "var(--fs-caption)", textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", fontWeight: 700, opacity: 0.95 }}
       >
         {label}
       </div>

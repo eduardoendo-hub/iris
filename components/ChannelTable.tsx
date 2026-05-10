@@ -17,7 +17,7 @@ export function ChannelTable({ rows }: { rows: Row[] }) {
       </div>
       <table className="w-full" style={{ borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", color: "var(--fg2)", fontWeight: 700 }}>
+          <tr style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", color: "var(--brand-soft)", fontWeight: 700, opacity: 0.95 }}>
             <th className="text-left px-5 py-2">Canal</th>
             <th className="text-right px-5 py-2">Custo</th>
             <th className="text-right px-5 py-2">Visitas</th>

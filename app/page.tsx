@@ -103,8 +103,9 @@ export default async function CockpitPage({
             fontSize: 10,
             textTransform: "uppercase",
             letterSpacing: "var(--ls-eyebrow)",
-            color: "var(--fg2)",
+            color: "var(--brand-soft)",
             fontWeight: 700,
+            opacity: 0.95,
           }}
         >
           Produto
@@ -150,8 +151,9 @@ export default async function CockpitPage({
               fontSize: 11,
               textTransform: "uppercase",
               letterSpacing: "var(--ls-eyebrow)",
-              color: "var(--fg2)",
+              color: "var(--brand-soft)",
               fontWeight: 700,
+              opacity: 0.95,
             }}
           >
             Insights

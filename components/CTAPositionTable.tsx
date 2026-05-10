@@ -19,7 +19,7 @@ export function CTAPositionTable({ rows }: { rows: { position: string; clicks: n
         <div className="flex flex-col gap-3">
           {rows.map((r) => (
             <div key={r.position} className="flex items-center gap-3">
-              <span className="w-16 shrink-0" style={{ fontSize: 12, color: "var(--fg2)", textTransform: "uppercase", fontWeight: 600 }}>
+              <span className="w-16 shrink-0" style={{ fontSize: 12, color: "var(--brand-soft)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "var(--ls-eyebrow)", opacity: 0.95 }}>
                 {r.position}
               </span>
               <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--cockpit-card-strong)" }}>
