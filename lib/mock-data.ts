@@ -27,6 +27,13 @@ export const MOCK_KPIS = {
   //   2. Cron de ingestão Meta Ads + Google Ads + GA4 (a partir de 11/05)
   // Meta da campanha: 30 matrículas, R$ 9.000 mídia, CAC máx R$ 300, ROAS 5x.
   "claude-pro": {
+    // Captação (bloco superior)
+    visitsLP:        0,
+    clicksCompra:    0, // botao Engaged
+    clicksWhats:     0,
+    clicksConsultor: 0,
+    mediaInvestment: 0, // soma Meta + Google
+    // Legado / compat com KPIs antigos
     sessions: 0,      sessionsDelta: null,
     ctaClicks: 0,     ctaClicksDelta: null,
     ctr: 0,           ctrDelta: null,

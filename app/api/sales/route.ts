@@ -23,7 +23,7 @@ function authorized(req: NextRequest): boolean {
 
 const SaleInput = z.object({
   productSlug: z.string().min(2).max(64),
-  source: z.enum(["ENGAGED", "MANUAL", "OTHER"]).default("MANUAL"),
+  source: z.enum(["ENGAGED", "DIRETA", "CONSULTOR", "MANUAL", "OTHER"]).default("DIRETA"),
   customerName: z.string().min(1).max(200),
   customerEmail: z.string().email().nullish(),
   customerPhone: z.string().max(40).nullish(),
@@ -51,10 +51,25 @@ export async function GET(req: NextRequest) {
       _sum: { amount: true },
       _count: { _all: true },
     });
+    // Quebra por origem (Diretas vs Consultor vs Engaged)
+    const grouped = await prisma.sale.groupBy({
+      by: ["source"],
+      where: { productSlug: product },
+      _count: { _all: true },
+      _sum: { amount: true },
+    });
+    const bySource: Record<string, { count: number; amount: number }> = {};
+    for (const g of grouped) {
+      bySource[g.source] = {
+        count: g._count._all,
+        amount: Number(g._sum.amount ?? 0),
+      };
+    }
     return NextResponse.json({
       product,
       totalCount: agg._count._all,
       totalAmount: Number(agg._sum.amount ?? 0),
+      bySource,
       sales,
     });
   } catch (err) {

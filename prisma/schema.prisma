@@ -190,7 +190,7 @@ enum LeadStatus {
 model Sale {
   id          String     @id @default(cuid())
   productSlug String     // "claude-pro"
-  source      SaleSource @default(MANUAL)
+  source      SaleSource @default(DIRETA)
 
   customerName  String
   customerEmail String?
@@ -213,9 +213,11 @@ model Sale {
 }
 
 enum SaleSource {
-  ENGAGED // checkout do Engaged (webhook Purchase)
-  MANUAL  // venda interna registrada manualmente
-  OTHER   // outra fonte (Hotmart, transferência direta, etc.)
+  ENGAGED   // checkout do Engaged (webhook Purchase, futuro)
+  DIRETA    // venda direta (manual: checkout/transferencia/outro)
+  CONSULTOR // venda fechada por consultor (manual)
+  MANUAL    // legado — mantido pra compat (nao usar mais em vendas novas)
+  OTHER     // outra fonte (Hotmart, etc.)
 }
 
 // ============================================================
