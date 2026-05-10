@@ -221,6 +221,46 @@ enum SaleSource {
 }
 
 // ============================================================
+// METRIC SAMPLE — sample agregado de qualquer fonte de ingest
+// (GA4 Data API, Meta Ads Insights, Google Ads GAQL, Engaged stats, etc.)
+//
+// Modelo unico generico: cada linha eh um (productSlug, source, metric,
+// bucket, startsAt) com valor numerico. Os crons fazem upsert idempotente
+// — se rodam de novo no mesmo bucket, sobrescrevem.
+//
+// Exemplos:
+//   GA4   sessions      DAY  2026-05-11  1240
+//   GA4   click_compra  DAY  2026-05-11    87
+//   GA4   click_whats   DAY  2026-05-11    45
+//   META  spend         DAY  2026-05-11   650.00
+// ============================================================
+model MetricSample {
+  id          String       @id @default(cuid())
+  productSlug String       // bate com Product.slug ("claude-pro")
+  source      MetricSource // GA4 | META_ADS | GOOGLE_ADS | ENGAGED | RD_CRM | MANUAL
+  metric      String       // nome do evento ou metrica ("sessions", "click_compra", "spend", etc.)
+  bucket      Bucket       // HOUR | DAY (reusa enum existente)
+  startsAt    DateTime     // inicio do bucket
+  value       Decimal      @db.Decimal(15, 2)
+  unit        String?      // "count" | "BRL" | "ratio" — opcional, ajuda formatacao
+  meta        Json?        // breakdowns adicionais (campaign_id, channel, etc.)
+  createdAt   DateTime     @default(now())
+
+  @@unique([productSlug, source, metric, bucket, startsAt])
+  @@index([productSlug, metric, startsAt])
+  @@index([source, startsAt])
+}
+
+enum MetricSource {
+  GA4
+  META_ADS
+  GOOGLE_ADS
+  ENGAGED
+  RD_CRM
+  MANUAL
+}
+
+// ============================================================
 // AUTH — NextAuth (Auth.js v5) tables
 // ============================================================
 model User {

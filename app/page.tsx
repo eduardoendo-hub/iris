@@ -44,17 +44,53 @@ export default async function CockpitPage({
   const channels = MOCK_CHANNELS[productKey] ?? [];
   const ctaPositions = MOCK_CTA_POSITION[productKey] ?? [];
 
-  // Métricas de captação derivadas dos mocks (substituídas por dados reais
-  // assim que GA4/Meta/Google plug a partir de 11/05).
-  const visitsLP = (kpi as { visitsLP?: number }).visitsLP ?? kpi.sessions ?? 0;
-  const clicksCompra = (kpi as { clicksCompra?: number }).clicksCompra ?? 0;
-  const clicksWhats = (kpi as { clicksWhats?: number }).clicksWhats ?? 0;
-  const clicksConsultor = (kpi as { clicksConsultor?: number }).clicksConsultor ?? 0;
-  const totalClicksCompras = clicksCompra; // pra taxa
-  const taxaConv =
-    visitsLP > 0 ? (totalClicksCompras / visitsLP) * 100 : 0;
-  const mediaInvestment =
+  // ────────────────────────────────────────────────────────────────
+  // KPIs de Captação — leem de MetricSample (GA4/Meta/Google ingest)
+  // Fallback pra mock se a tabela estiver vazia (pre-launch).
+  // ────────────────────────────────────────────────────────────────
+  let visitsLP = (kpi as { visitsLP?: number }).visitsLP ?? kpi.sessions ?? 0;
+  let clicksCompra = (kpi as { clicksCompra?: number }).clicksCompra ?? 0;
+  let clicksWhats = (kpi as { clicksWhats?: number }).clicksWhats ?? 0;
+  let clicksConsultor = (kpi as { clicksConsultor?: number }).clicksConsultor ?? 0;
+  let mediaInvestment =
     (kpi as { mediaInvestment?: number }).mediaInvestment ?? kpi.cost ?? 0;
+  let metricsSourceLabel = "mock";
+  try {
+    // Soma os ULTIMOS 7 DIAS de cada metrica (DAY bucket) pro produto
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const samples = await prisma.metricSample.groupBy({
+      by: ["metric", "source"],
+      where: {
+        productSlug: slug,
+        bucket: "DAY",
+        startsAt: { gte: sevenDaysAgo },
+      },
+      _sum: { value: true },
+    });
+    const byMetric: Record<string, number> = {};
+    for (const s of samples) {
+      byMetric[s.metric] = (byMetric[s.metric] ?? 0) + Number(s._sum.value ?? 0);
+    }
+    const ga4Has = (m: string) => typeof byMetric[m] === "number" && byMetric[m] > 0;
+    if (ga4Has("sessions") || ga4Has("lp_view")) {
+      visitsLP = byMetric["sessions"] ?? byMetric["lp_view"] ?? 0;
+      metricsSourceLabel = "GA4 · 7d";
+    }
+    if (ga4Has("click_compra")) clicksCompra = byMetric["click_compra"];
+    if (ga4Has("click_whats")) clicksWhats = byMetric["click_whats"];
+    if (ga4Has("click_consultor")) clicksConsultor = byMetric["click_consultor"];
+    // mediaInvestment: soma spend de META + GOOGLE quando ingestaremos
+    const spendMeta =
+      samples.find((s) => s.source === "META_ADS" && s.metric === "spend")?._sum.value;
+    const spendGoogle =
+      samples.find((s) => s.source === "GOOGLE_ADS" && s.metric === "spend")?._sum.value;
+    if (spendMeta || spendGoogle) {
+      mediaInvestment = Number(spendMeta ?? 0) + Number(spendGoogle ?? 0);
+    }
+  } catch {
+    // tabela MetricSample nao existe ainda — segue com mocks
+  }
+  const taxaConv = visitsLP > 0 ? (clicksCompra / visitsLP) * 100 : 0;
 
   // Dados reais — Leads recebidos via webhook do integracao-rd
   let leadsCount = 0;
@@ -152,7 +188,7 @@ export default async function CockpitPage({
       </div>
 
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col gap-8">
-        <MockBanner />
+        {metricsSourceLabel === "mock" && <MockBanner />}
 
         {/* ───────────────────────────────────────────────
             SEÇÃO 1 — CAPTAÇÃO
