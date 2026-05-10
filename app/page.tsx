@@ -60,21 +60,36 @@ export default async function CockpitPage({
           <KPICard label="Investimento (7d)" value={kpi.cost}      delta={kpi.costDelta}       format="currency" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 flex flex-col gap-6">
-            <ChannelTable rows={[...channels]} />
-            <CTAPositionTable rows={[...ctaPositions]} />
-          </div>
+        {/* Bloco principal de tabelas: agora ocupa toda a largura.
+            Espaço lateral fica livre pra futuras visualizacoes (graficos,
+            tabelas adicionais, painel comercial, etc.). */}
+        <div className="flex flex-col gap-6">
+          <ChannelTable rows={[...channels]} />
+          <CTAPositionTable rows={[...ctaPositions]} />
+        </div>
 
-          <aside className="flex flex-col gap-3">
-            <h3 className="px-1" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", color: "var(--fg2)", fontWeight: 700 }}>
-              Insights
-            </h3>
+        {/* Insights movidos pra abaixo de tudo, ocupando toda a largura.
+            Cards do tipo InsightItem em grid responsivo (1 col mobile,
+            2 cols tablet, 3 cols desktop). */}
+        <section className="flex flex-col gap-3 mt-2">
+          <h3
+            className="px-1"
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: "var(--ls-eyebrow)",
+              color: "var(--fg2)",
+              fontWeight: 700,
+            }}
+          >
+            Insights
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {MOCK_INSIGHTS.map((i) => (
               <InsightItem key={i.id} {...i} />
             ))}
-          </aside>
-        </div>
+          </div>
+        </section>
       </main>
 
       <footer
