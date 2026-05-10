@@ -2,9 +2,10 @@
 // Removido em D1.h quando dados reais começam a popular o Postgres.
 
 export const MOCK_PRODUCTS = [
-  { slug: "direito5",   name: "Direito 5.0",      url: "https://direito5.technowhub.ai" },
-  { slug: "peopleai",   name: "People AI Lab",    url: "https://peopleai.technowhub.ai" },
-  { slug: "claude-pro", name: "Curso Claude Pro", url: "https://impacta.com.br/claude" },
+  // Por enquanto só o Curso Claude Pro está sendo monitorado em produção.
+  // Direito 5.0 e People AI Lab vão entrar quando os conectores GA4 + Ads
+  // forem configurados pra esses produtos também.
+  { slug: "claude-pro", name: "Curso Claude Pro", url: "https://claude.technowhub.ai" },
 ];
 
 export const MOCK_KPIS = {

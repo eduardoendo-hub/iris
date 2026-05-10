@@ -5,6 +5,8 @@ import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
 import { InsightItem } from "@/components/InsightItem";
+import { LeadsTable } from "@/components/LeadsTable";
+import { prisma } from "@/lib/prisma";
 import {
   MOCK_PRODUCTS,
   MOCK_KPIS,
@@ -12,6 +14,8 @@ import {
   MOCK_CTA_POSITION,
   MOCK_INSIGHTS,
 } from "@/lib/mock-data";
+
+export const dynamic = "force-dynamic";
 
 type SearchParams = { product?: string };
 
@@ -21,12 +25,35 @@ export default async function CockpitPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const slug = params.product ?? "direito5";
+  const slug = params.product ?? "claude-pro";
   const productKey = slug as keyof typeof MOCK_KPIS;
 
-  const kpi = MOCK_KPIS[productKey] ?? MOCK_KPIS.direito5;
+  const kpi = MOCK_KPIS[productKey] ?? MOCK_KPIS["claude-pro"];
   const channels = MOCK_CHANNELS[productKey] ?? [];
   const ctaPositions = MOCK_CTA_POSITION[productKey] ?? [];
+
+  // Dados reais — conta + ultimos N Leads recebidos via webhook do integracao-rd
+  let leadsCount = 0;
+  let leadsRecent: Array<{
+    id: string; name: string | null; email: string | null; phone: string | null;
+    eventType: string; rdCrmDealId: string | null; capturedAt: Date;
+    utmSource: string | null; utmMedium: string | null; utmCampaign: string | null;
+  }> = [];
+  try {
+    leadsCount = await prisma.lead.count({ where: { productSlug: slug } });
+    leadsRecent = await prisma.lead.findMany({
+      where: { productSlug: slug },
+      orderBy: { capturedAt: "desc" },
+      take: 20,
+      select: {
+        id: true, name: true, email: true, phone: true,
+        eventType: true, rdCrmDealId: true, capturedAt: true,
+        utmSource: true, utmMedium: true, utmCampaign: true,
+      },
+    });
+  } catch {
+    // DB nao disponivel ou tabela nao existe — segue com lista vazia
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -54,11 +81,14 @@ export default async function CockpitPage({
         <MockBanner />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard label="Visitas (7d)"     value={kpi.sessions}   delta={kpi.sessionsDelta}   format="number" />
-          <KPICard label="Cliques no CTA"   value={kpi.ctaClicks}  delta={kpi.ctaClicksDelta}  format="number" />
-          <KPICard label="Taxa de conversão" value={kpi.ctr}       delta={kpi.ctrDelta}        format="percent" hint="cliques / visitas" />
-          <KPICard label="Investimento (7d)" value={kpi.cost}      delta={kpi.costDelta}       format="currency" />
+          <KPICard label="Leads recebidos"    value={leadsCount}    format="number" hint="via formulário da LP (RD CRM)" />
+          <KPICard label="Visitas (7d)"       value={kpi.sessions}  delta={kpi.sessionsDelta}  format="number" />
+          <KPICard label="Taxa de conversão"  value={kpi.ctr}       delta={kpi.ctrDelta}       format="percent" hint="cliques / visitas" />
+          <KPICard label="Investimento (7d)"  value={kpi.cost}      delta={kpi.costDelta}      format="currency" />
         </div>
+
+        {/* DADOS REAIS — Leads que chegaram no RD CRM via integracao-rd */}
+        <LeadsTable leads={leadsRecent} totalCount={leadsCount} />
 
         {/* Bloco principal de tabelas: agora ocupa toda a largura.
             Espaço lateral fica livre pra futuras visualizacoes (graficos,
