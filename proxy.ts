@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/api/auth", "/api/health"];
+const PUBLIC_ROUTES = ["/login", "/api/auth", "/api/health", "/api/webhook"];
 
 // Preview mode: bypass auth entirely. Used during initial deploy
 // while Google OAuth credentials and real data sources aren't ready yet.
