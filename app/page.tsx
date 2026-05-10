@@ -6,6 +6,8 @@ import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
 import { InsightItem } from "@/components/InsightItem";
 import { LeadsTable } from "@/components/LeadsTable";
+import { SalesTable } from "@/components/SalesTable";
+import { SaleFormButton } from "@/components/SaleFormButton";
 import { prisma } from "@/lib/prisma";
 import {
   MOCK_PRODUCTS,
@@ -55,6 +57,39 @@ export default async function CockpitPage({
     // DB nao disponivel ou tabela nao existe — segue com lista vazia
   }
 
+  // Vendas — quantidade, acumulado e detalhe (Engaged + manual)
+  let salesCount = 0;
+  let salesTotal = 0;
+  let sales: Array<{
+    id: string; source: string;
+    customerName: string; customerEmail: string | null; customerPhone: string | null;
+    amount: number; currency: string; notes: string | null;
+    saleDate: Date;
+  }> = [];
+  try {
+    const agg = await prisma.sale.aggregate({
+      where: { productSlug: slug },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    salesCount = agg._count._all;
+    salesTotal = Number(agg._sum.amount ?? 0);
+    const raw = await prisma.sale.findMany({
+      where: { productSlug: slug },
+      orderBy: { saleDate: "desc" },
+      take: 50,
+    });
+    sales = raw.map((s) => ({
+      id: s.id, source: s.source,
+      customerName: s.customerName,
+      customerEmail: s.customerEmail, customerPhone: s.customerPhone,
+      amount: Number(s.amount), currency: s.currency,
+      notes: s.notes, saleDate: s.saleDate,
+    }));
+  } catch {
+    // tabela Sale nao existe ainda — segue com vazio
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Topbar />
@@ -81,14 +116,21 @@ export default async function CockpitPage({
         <MockBanner />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard label="Leads recebidos"    value={leadsCount}    format="number" hint="via formulário da LP (RD CRM)" />
-          <KPICard label="Visitas (7d)"       value={kpi.sessions}  delta={kpi.sessionsDelta}  format="number" />
-          <KPICard label="Taxa de conversão"  value={kpi.ctr}       delta={kpi.ctrDelta}       format="percent" hint="cliques / visitas" />
-          <KPICard label="Investimento (7d)"  value={kpi.cost}      delta={kpi.costDelta}      format="currency" />
+          <KPICard label="Leads recebidos"    value={leadsCount}  format="number"   hint="via formulário (RD CRM)" />
+          <KPICard label="Vendas confirmadas" value={salesCount}  format="number"   hint="Engaged + manual" />
+          <KPICard label="Receita acumulada"  value={salesTotal}  format="currency" hint={salesCount > 0 ? `ticket médio R$ ${(salesTotal / salesCount).toFixed(2).replace('.', ',')}` : "—"} />
+          <KPICard label="Investimento (7d)"  value={kpi.cost}    delta={kpi.costDelta}  format="currency" />
         </div>
 
         {/* DADOS REAIS — Leads que chegaram no RD CRM via integracao-rd */}
         <LeadsTable leads={leadsRecent} totalCount={leadsCount} />
+
+        {/* VENDAS — confirmadas (Engaged via webhook + manuais) */}
+        <div className="flex items-center justify-between">
+          <h2 style={{ fontSize: 16, fontWeight: 700 }}>Vendas</h2>
+          <SaleFormButton productSlug={slug} />
+        </div>
+        <SalesTable sales={sales} totalCount={salesCount} totalAmount={salesTotal} />
 
         {/* Bloco principal de tabelas: agora ocupa toda a largura.
             Espaço lateral fica livre pra futuras visualizacoes (graficos,

@@ -112,8 +112,35 @@ export function LeadsTable({ leads, totalCount }: { leads: LeadRow[]; totalCount
                       {l.eventType === "FORM_SUBMIT" ? "Form" : "WhatsApp"}
                     </span>
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--fg2)" }}>
-                    {l.rdCrmDealId ? l.rdCrmDealId.slice(-8) : <span style={{ opacity: 0.4 }}>—</span>}
+                  <td style={{ padding: "12px 16px", fontSize: 11 }}>
+                    {l.rdCrmDealId ? (
+                      <a
+                        href={`https://crm.rdstation.com/app/deals/${l.rdCrmDealId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Abrir Deal ${l.rdCrmDealId} no RD CRM`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          padding: "3px 8px",
+                          borderRadius: 4,
+                          background: "rgba(10,186,181,0.10)",
+                          border: "1px solid rgba(10,186,181,0.25)",
+                          color: "var(--brand)",
+                          fontFamily: "var(--font-mono)",
+                          textDecoration: "none",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Abrir RD
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M7 17L17 7M17 7H8M17 7v9" />
+                        </svg>
+                      </a>
+                    ) : (
+                      <span style={{ opacity: 0.4 }}>—</span>
+                    )}
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "right", color: "var(--fg2)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
                     {formatDate(l.capturedAt)}

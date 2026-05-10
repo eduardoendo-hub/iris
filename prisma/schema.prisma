@@ -184,6 +184,41 @@ enum LeadStatus {
 }
 
 // ============================================================
+// SALE — vendas confirmadas (registradas via webhook Engaged
+// ou manualmente quando vem de outro canal).
+// ============================================================
+model Sale {
+  id          String     @id @default(cuid())
+  productSlug String     // "claude-pro"
+  source      SaleSource @default(MANUAL)
+
+  customerName  String
+  customerEmail String?
+  customerPhone String?
+
+  amount   Decimal @db.Decimal(10, 2)
+  currency String  @default("BRL")
+
+  // External refs (quando vem do Engaged ou outro gateway)
+  externalId  String? // ID do pedido no sistema de origem
+  externalRef String? // payment_id, invoice, etc.
+
+  notes String? @db.Text
+
+  saleDate  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([productSlug, saleDate])
+  @@index([source])
+}
+
+enum SaleSource {
+  ENGAGED // checkout do Engaged (webhook Purchase)
+  MANUAL  // venda interna registrada manualmente
+  OTHER   // outra fonte (Hotmart, transferência direta, etc.)
+}
+
+// ============================================================
 // AUTH — NextAuth (Auth.js v5) tables
 // ============================================================
 model User {
