@@ -164,23 +164,61 @@ function verifyHmac(rawBody: string, signature: string | null, secret: string): 
   }
 }
 
+function verifyBearer(provided: string | null, secret: string): boolean {
+  if (!provided) return false;
+  // Aceita "Bearer xxx" ou "xxx" direto
+  const value = provided.replace(/^Bearer\s+/i, "").trim();
+  if (value.length !== secret.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(value), Buffer.from(secret));
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   // Le body raw pra validar HMAC ANTES de parsear
   const rawBody = await req.text();
 
-  // HMAC validation (se secret configurado)
+  // Auth: aceita 2 formatos pra flexibilidade com plataformas diferentes:
+  //
+  // 1) HMAC-SHA256 do body (mais seguro — preferido):
+  //    Header: X-Engaged-Signature, X-Webhook-Signature ou X-Hub-Signature-256
+  //    Value: hex digest de HMAC(secret, body) — Engaged calcula a cada request
+  //
+  // 2) Bearer token estático (fallback — quando plataforma nao suporta HMAC):
+  //    Header: Authorization: Bearer <secret>   OU
+  //    Header: X-Engaged-Secret: <secret>       OU
+  //    Header: X-Webhook-Secret: <secret>
+  //    Value: o secret cru em todas as requests
+  //
+  // Se ENGAGED_WEBHOOK_SECRET nao configurado → modo dev (aceita tudo).
   const secret = process.env.ENGAGED_WEBHOOK_SECRET;
   if (secret) {
-    const sig =
+    const hmacSig =
       req.headers.get("x-engaged-signature") ||
       req.headers.get("x-webhook-signature") ||
       req.headers.get("x-hub-signature-256") ||
       null;
-    if (!verifyHmac(rawBody, sig, secret)) {
-      return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
+    const bearerSecret =
+      req.headers.get("authorization") ||
+      req.headers.get("x-engaged-secret") ||
+      req.headers.get("x-webhook-secret") ||
+      null;
+
+    const hmacOk = hmacSig ? verifyHmac(rawBody, hmacSig, secret) : false;
+    const bearerOk = bearerSecret ? verifyBearer(bearerSecret, secret) : false;
+
+    if (!hmacOk && !bearerOk) {
+      return NextResponse.json(
+        {
+          error: "invalid_signature",
+          hint: "Use X-Engaged-Signature (HMAC-SHA256 do body) OU X-Engaged-Secret/Authorization: Bearer <token> com o secret cru.",
+        },
+        { status: 401 }
+      );
     }
   }
-  // se !secret → modo dev, aceita sem validar (warning no log)
 
   let json: unknown;
   try {
@@ -268,9 +306,24 @@ export async function POST(req: NextRequest) {
 
 // GET pra debug rapido (so retorna config status, sem secret)
 export async function GET() {
+  const hasSecret = !!process.env.ENGAGED_WEBHOOK_SECRET;
   return NextResponse.json({
     endpoint: "/api/webhook/engaged",
-    auth: process.env.ENGAGED_WEBHOOK_SECRET ? "hmac_required" : "open (dev mode)",
+    auth: hasSecret ? "auth_required" : "open (dev mode)",
+    accepted_auth_methods: hasSecret
+      ? [
+          {
+            method: "HMAC-SHA256 (preferido)",
+            header: "X-Engaged-Signature (ou X-Webhook-Signature, X-Hub-Signature-256)",
+            value: "hex digest de HMAC(secret, body) — calculado a cada request",
+          },
+          {
+            method: "Bearer estatico (fallback)",
+            header: "Authorization: Bearer <secret> (ou X-Engaged-Secret, X-Webhook-Secret)",
+            value: "o secret cru em todas as requests",
+          },
+        ]
+      : [],
     accepted_status: Array.from(PAID_STATUS),
     expected_payload_example: {
       event: "purchase.completed",
