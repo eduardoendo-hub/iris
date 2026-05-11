@@ -40,14 +40,23 @@ type GraphResponse = {
   error?: { message: string; code: number; type: string };
 };
 
-function loadConfig(): { accessToken: string; adAccountId: string } {
+function loadConfig(): {
+  accessToken: string;
+  adAccountId: string;
+  campaignFilter: string | null;
+} {
   const accessToken = process.env.META_ACCESS_TOKEN;
   const raw = process.env.META_AD_ACCOUNT_ID;
   if (!accessToken) throw new Error("META_ACCESS_TOKEN nao configurada");
   if (!raw) throw new Error("META_AD_ACCOUNT_ID nao configurada");
   // Aceita "act_1234" ou "1234" (normaliza pra "act_1234")
   const adAccountId = raw.startsWith("act_") ? raw : `act_${raw}`;
-  return { accessToken, adAccountId };
+  // Filtro opcional por nome de campanha (substring case-insensitive).
+  // Se a Ad Account roda multiplos produtos da Impacta (MBA, programacao,
+  // etc), esse filtro garante que so o gasto de campanhas do produto
+  // certo (ex: "CLAUDE") seja contabilizado no IRIS.
+  const campaignFilter = process.env.META_CAMPAIGN_FILTER?.trim() || null;
+  return { accessToken, adAccountId, campaignFilter };
 }
 
 function pickDatePreset(days: number): string {
@@ -59,13 +68,25 @@ function pickDatePreset(days: number): string {
 }
 
 async function fetchInsights(days: number): Promise<DailyInsight[]> {
-  const { accessToken, adAccountId } = loadConfig();
+  const { accessToken, adAccountId, campaignFilter } = loadConfig();
   const fields = ["spend", "impressions", "clicks", "reach", "cpc", "cpm", "ctr"].join(",");
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/insights`);
   url.searchParams.set("fields", fields);
   url.searchParams.set("date_preset", pickDatePreset(days));
   url.searchParams.set("time_increment", "1"); // 1 = breakdown por dia
-  url.searchParams.set("level", "account"); // agregado da conta inteira
+  // Se ha campaign filter, requeresta level=campaign pra poder aplicar
+  // o filtro (Meta API nao aceita filter campaign.name em level=account).
+  // Depois agregamos por dia somando as campanhas que passaram no filtro.
+  if (campaignFilter) {
+    url.searchParams.set("level", "campaign");
+    url.searchParams.set(
+      "filtering",
+      JSON.stringify([{ field: "campaign.name", operator: "CONTAIN", value: campaignFilter }])
+    );
+  } else {
+    url.searchParams.set("level", "account");
+  }
+  url.searchParams.set("limit", "500"); // ate 500 rows (cobre 30 dias x 16 campanhas)
   url.searchParams.set("access_token", accessToken);
 
   const r = await fetch(url.toString(), { method: "GET" });
@@ -74,7 +95,30 @@ async function fetchInsights(days: number): Promise<DailyInsight[]> {
     const msg = json.error?.message || `HTTP ${r.status}`;
     throw new Error(`Meta Insights API: ${msg}`);
   }
-  return json.data ?? [];
+  // Se vem em level=campaign, agrega por dia somando spend/impressions/clicks
+  // de TODAS as campanhas (que ja foram filtradas pelo CONTAIN no API).
+  const rows = json.data ?? [];
+  if (campaignFilter) {
+    const byDay = new Map<string, DailyInsight>();
+    for (const r of rows) {
+      if (!r.date_start) continue;
+      const cur = byDay.get(r.date_start) ?? {
+        date_start: r.date_start,
+        date_stop: r.date_stop,
+        spend: "0",
+        impressions: "0",
+        clicks: "0",
+      };
+      cur.spend = String(Number(cur.spend ?? 0) + Number(r.spend ?? 0));
+      cur.impressions = String(Number(cur.impressions ?? 0) + Number(r.impressions ?? 0));
+      cur.clicks = String(Number(cur.clicks ?? 0) + Number(r.clicks ?? 0));
+      byDay.set(r.date_start, cur);
+    }
+    return Array.from(byDay.values()).sort((a, b) =>
+      (a.date_start ?? "").localeCompare(b.date_start ?? "")
+    );
+  }
+  return rows;
 }
 
 function ymdToBucketStart(date: string): Date {
