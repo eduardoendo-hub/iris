@@ -103,9 +103,22 @@ export async function ingestGoogleAds(opts: {
   const { productSlug } = opts;
   const cfg = loadConfig(productSlug);
 
-  // Date range: ULTIMOS N dias até ontem (Google Ads pode ter dados de hoje
-  // ainda chegando — DURING LAST_N_DAYS inclui hoje, OK).
+  // Date range explicito BETWEEN (UNLIKE Meta, LAST_N_DAYS no GAQL NAO
+  // inclui hoje — bug pegado em smoke test). Calcula start/end em SP
+  // timezone pra alinhar com o resto do cockpit.
   const customer = getCustomer(productSlug);
+
+  const spDate = (offsetDays: number): string => {
+    const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  };
+  const endDate = spDate(0); // hoje
+  const startDate = spDate(days - 1); // N-1 dias atras (BETWEEN inclusivo)
 
   // GAQL: campanhas agregadas por dia
   // (Google Ads usa cost_micros — divide por 1.000.000 pra ter R$/USD)
@@ -120,7 +133,7 @@ export async function ingestGoogleAds(opts: {
       metrics.impressions,
       metrics.clicks
     FROM campaign
-    WHERE segments.date DURING LAST_${days}_DAYS
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
       ${filterClause}
     ORDER BY segments.date DESC
   `;
