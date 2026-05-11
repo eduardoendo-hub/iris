@@ -73,6 +73,18 @@ function parseCutoff(req: NextRequest): CutoffMode {
   return { type: "before", cutoff: brtMidnightUTC(raw) };
 }
 
+/**
+ * ?source=GA4|META_ADS|GOOGLE_ADS|ENGAGED|RD_CRM|MANUAL → apaga so essa source
+ * (MetricSample apenas — Lead/Sale/Snapshot nao tem coluna source compativel)
+ */
+function parseSourceFilter(req: NextRequest): string | null {
+  const url = new URL(req.url);
+  const raw = url.searchParams.get("source")?.toUpperCase().trim();
+  if (!raw) return null;
+  const valid = ["GA4", "META_ADS", "GOOGLE_ADS", "ENGAGED", "RD_CRM", "MANUAL"];
+  return valid.includes(raw) ? raw : null;
+}
+
 async function countAll() {
   const [leads, sales, metrics, snapshots] = await Promise.all([
     prisma.lead.count(),
@@ -144,6 +156,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const mode = parseCutoff(req);
+    const sourceFilter = parseSourceFilter(req);
     const before = await countAll();
 
     let delLeads = { count: 0 };
@@ -151,7 +164,19 @@ export async function POST(req: NextRequest) {
     let delMetrics = { count: 0 };
     let delSnapshots = { count: 0 };
 
-    if (mode.type === "all") {
+    // Se ha source filter, apaga APENAS MetricSample dessa source.
+    // Lead/Sale/Snapshot ficam intactos (nao tem source comparavel).
+    if (sourceFilter) {
+      delMetrics = await prisma.metricSample
+        .deleteMany({
+          where: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            source: sourceFilter as any,
+            ...(mode.type === "before" ? { createdAt: { lt: mode.cutoff } } : {}),
+          },
+        })
+        .catch(() => ({ count: 0 }));
+    } else if (mode.type === "all") {
       [delSnapshots, delMetrics, delSales, delLeads] = await Promise.all([
         prisma.snapshot.deleteMany({}).catch(() => ({ count: 0 })),
         prisma.metricSample.deleteMany({}).catch(() => ({ count: 0 })),
