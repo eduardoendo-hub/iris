@@ -1,20 +1,26 @@
 name: Cron · Ingest GA4 / Meta / Google
 
-# Roda a cada 15min pra puxar dados das fontes externas pro IRIS.
-# Idempotente — re-rodar no mesmo bucket sobrescreve via upsert.
+# Crons separados por fonte. Idempotentes — re-rodar no mesmo bucket
+# sobrescreve via upsert. Ingest de eventos (lp_view, click_compra, etc)
+# eh PUSH em real-time da LP via /api/events; estes crons puxam metricas
+# de fontes externas (GA4 sessions, Meta spend, Google spend).
 #
 # Secret necessario no repo (Settings → Secrets and variables → Actions):
 #   IRIS_CRON_SECRET = mesmo valor do CRON_SECRET no Coolify do iris
+
 on:
   schedule:
+    # GA4: a cada 15min (sessions/eventos historicos pra preencher gap
+    # do PUSH de /api/events em caso de falha; redundancia barata)
     - cron: "*/15 * * * *"
-  workflow_dispatch: # permite rodar manualmente em Actions tab
+  workflow_dispatch:
 
 jobs:
   ga4:
     name: GA4 ingest (claude-pro)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: ${{ github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: POST /api/cron/ga4
         run: |
@@ -23,23 +29,30 @@ jobs:
             -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}" \
             -H "User-Agent: github-actions-cron-iris" \
             -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"
+        continue-on-error: true # GA4 cred opcional (modo Plano C dispensa)
 
-  # Stubs pra Fase 3/4 — descomentar quando os endpoints existirem
-  # meta:
-  #   name: Meta Ads ingest
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 5
-  #   steps:
-  #     - run: |
-  #         curl --fail-with-body -X POST \
-  #           "https://iris.technowhub.ai/api/cron/meta?product=claude-pro" \
-  #           -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}"
-  # google:
+  meta-ads:
+    name: Meta Ads ingest (claude-pro)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: POST /api/cron/meta-ads
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -X POST "https://iris.technowhub.ai/api/cron/meta-ads?product=claude-pro&days=7" \
+            -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}" \
+            -H "User-Agent: github-actions-cron-iris" \
+            -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"
+        continue-on-error: true # Meta cred opcional ate o user setar
+
+  # Google Ads ingest (Fase 4 — descomentar quando endpoint existir)
+  # google-ads:
   #   name: Google Ads ingest
   #   runs-on: ubuntu-latest
   #   timeout-minutes: 5
   #   steps:
   #     - run: |
   #         curl --fail-with-body -X POST \
-  #           "https://iris.technowhub.ai/api/cron/google?product=claude-pro" \
+  #           "https://iris.technowhub.ai/api/cron/google-ads?product=claude-pro" \
   #           -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}"
