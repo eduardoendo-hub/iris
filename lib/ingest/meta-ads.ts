@@ -20,6 +20,7 @@
  * Meta tambem — evita double-count.
  */
 import { prisma } from "@/lib/prisma";
+import { getProductConfig } from "@/lib/products";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -40,7 +41,7 @@ type GraphResponse = {
   error?: { message: string; code: number; type: string };
 };
 
-function loadConfig(): {
+function loadConfig(productSlug: string): {
   accessToken: string;
   adAccountId: string;
   campaignFilter: string | null;
@@ -51,11 +52,15 @@ function loadConfig(): {
   if (!raw) throw new Error("META_AD_ACCOUNT_ID nao configurada");
   // Aceita "act_1234" ou "1234" (normaliza pra "act_1234")
   const adAccountId = raw.startsWith("act_") ? raw : `act_${raw}`;
-  // Filtro opcional por nome de campanha (substring case-insensitive).
-  // Se a Ad Account roda multiplos produtos da Impacta (MBA, programacao,
-  // etc), esse filtro garante que so o gasto de campanhas do produto
-  // certo (ex: "CLAUDE") seja contabilizado no IRIS.
-  const campaignFilter = process.env.META_CAMPAIGN_FILTER?.trim() || null;
+  // Filter agora vem da config do PRODUTO (lib/products.ts) — escalavel
+  // pra multi-produto na MESMA Ad Account. Antes era env var unica.
+  const product = getProductConfig(productSlug);
+  if (!product) {
+    throw new Error(
+      `Produto '${productSlug}' nao configurado em lib/products.ts. Adiciona uma entrada com metaCampaignFilter pra esse slug.`
+    );
+  }
+  const campaignFilter = product.metaCampaignFilter || null;
   return { accessToken, adAccountId, campaignFilter };
 }
 
@@ -67,8 +72,8 @@ function pickDatePreset(days: number): string {
   return "last_30d";
 }
 
-async function fetchInsights(days: number): Promise<DailyInsight[]> {
-  const { accessToken, adAccountId, campaignFilter } = loadConfig();
+async function fetchInsights(days: number, productSlug: string): Promise<DailyInsight[]> {
+  const { accessToken, adAccountId, campaignFilter } = loadConfig(productSlug);
   const fields = ["spend", "impressions", "clicks", "reach", "cpc", "cpm", "ctr"].join(",");
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/insights`);
   url.searchParams.set("fields", fields);
@@ -144,7 +149,7 @@ export async function ingestMetaAds(opts: {
   const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
   const { productSlug } = opts;
 
-  const insights = await fetchInsights(days);
+  const insights = await fetchInsights(days, productSlug);
 
   let upserted = 0;
   const details: MetaIngestResult["details"] = [];
