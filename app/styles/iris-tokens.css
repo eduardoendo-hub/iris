@@ -17,12 +17,19 @@
   --status-critical-bg: rgba(236, 96, 136, 0.10);
   --status-success-bg:  rgba(48, 209, 88, 0.10);
 
-  /* ---------- COCKPIT SURFACES ---------- */
+  /* ---------- COCKPIT SURFACES ----------
+     v0.2 — aumentado contraste das superficies pra dar peso visual
+     nas divisoes do dashboard. Cards passam a ter corpo visivel,
+     bordas ficam claras o suficiente pra separar secoes sem precisar
+     de espaco em branco extra. */
   --cockpit-bg:        var(--bg);
-  --cockpit-card:      rgba(255, 255, 255, 0.02);
-  --cockpit-card-strong: rgba(255, 255, 255, 0.04);
-  --cockpit-border:    rgba(255, 255, 255, 0.06);
-  --cockpit-border-strong: rgba(255, 255, 255, 0.10);
+  --cockpit-card:        rgba(255, 255, 255, 0.045);  /* era 0.02 */
+  --cockpit-card-strong: rgba(255, 255, 255, 0.085);  /* era 0.04 */
+  --cockpit-border:        rgba(255, 255, 255, 0.16); /* era 0.06 */
+  --cockpit-border-strong: rgba(255, 255, 255, 0.28); /* era 0.10 */
+
+  /* Subtle inner highlight no topo dos cards (dá sensação de "elevado") */
+  --cockpit-card-highlight: rgba(255, 255, 255, 0.04);
 
   /* ---------- DELTA INDICATORS ---------- */
   --delta-up:   var(--tn-go-green);

@@ -354,8 +354,9 @@ export default async function CockpitPage({
 }
 
 /**
- * Section — bloco visual com header (eyebrow + title) + linha divisória.
- * Mantém elegância sem caixotes pesados; usa só borda superior + tipografia.
+ * Section — bloco visual com header (eyebrow + title) + divisor visual forte.
+ * v0.2 — eyebrow maior + linha dupla (Tiffany acima, border abaixo) pra
+ * deixar separacao entre Captação / Vendas / Detalhamento bem clara.
  */
 function Section({
   eyebrow,
@@ -371,23 +372,41 @@ function Section({
   return (
     <section className="flex flex-col gap-4">
       <div
-        className="flex items-end justify-between flex-wrap gap-2 pb-2"
-        style={{ borderBottom: "1px solid var(--cockpit-border)" }}
+        className="flex items-end justify-between flex-wrap gap-2 pb-3"
+        style={{
+          borderBottom: "1px solid var(--cockpit-border-strong)",
+        }}
       >
-        <div className="flex flex-col gap-0.5">
+        <div
+          className="flex flex-col gap-1 relative"
+          style={{ paddingLeft: 14 }}
+        >
+          {/* Marcador vertical Tiffany à esquerda do título da seção */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 2,
+              bottom: 2,
+              width: 4,
+              borderRadius: 2,
+              background: "var(--brand)",
+            }}
+          />
           <span
             style={{
-              fontSize: 10,
+              fontSize: 11,
               textTransform: "uppercase",
               letterSpacing: "var(--ls-eyebrow)",
               color: "var(--brand)",
-              fontWeight: 700,
+              fontWeight: 800,
             }}
           >
             {eyebrow}
           </span>
           {title && (
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)" }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--fg1)" }}>
               {title}
             </h2>
           )}

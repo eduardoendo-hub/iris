@@ -50,7 +50,10 @@
   /* ---------- GLOWS ---------- */
   --glow-tiffany: 0 0 24px rgba(10, 186, 181, 0.30);
   --glow-rose:    0 0 12px rgba(236, 96, 136, 0.70);
-  --shadow-1:     0 1px 2px rgba(0, 0, 0, 0.30);
+  /* shadow-1 reforcada — usada por cards do cockpit. Era 0 1px 2px (quase
+     invisivel); agora combina ponta dura inferior + sombra ambiente suave
+     pra dar "lift" sem pesar a UI. */
+  --shadow-1:     0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 28px -12px rgba(0, 0, 0, 0.55);
   --shadow-2:     0 6px 24px rgba(0, 0, 0, 0.40);
   --shadow-card:  0 2px 0 rgba(0,0,0,0.20), 0 18px 48px -16px rgba(0,0,0,0.55);
 
