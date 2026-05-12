@@ -1,4 +1,4 @@
-# 07 — Campanha Curso Claude Pro (lançamento 11/05 → 06/06/2026)
+# 07 — Campanha Curso Claude Pro (lançamento 11/05 → 08/06/2026)
 
 Primeira campanha Impacta a entrar no IRIS. Serve como template para futuras LPs Impacta
 (Direito 5.0 já está coberto no `00-VISION` como produto TechNow; este é o **primeiro
@@ -14,7 +14,7 @@ produto Impacta** sendo monitorado pelo IRIS).
 ## Campanha ativa
 
 - **slug:** `claude-pro-maio-2026`
-- **período:** 2026-05-11 → 2026-06-06
+- **período:** 2026-05-11 → 2026-06-08
 - **meta:** 30 matrículas
 - **mídia:** R$ 9.000 (40% Meta prospecting, 14% Meta remarketing, 26% Google Search alta intenção, 7% Google Search complementar, 3% Google remarketing, 10% reserva)
 - **CAC máx:** R$ 300

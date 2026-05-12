@@ -35,7 +35,7 @@ curl -s -H "X-Admin-Secret: <secret>" https://iris.technowhub.ai/api/admin/produ
 | **Pixel Meta** | `2233020050842609` | LP `inject-tracking.js` |
 | **GA4 measurement ID** | `G-JHEJ5ENF8R` | LP `inject-tracking.js` |
 | **Campanha início** | `2026-05-11` | M1/M2/G1/G2 |
-| **Campanha fim** | `2026-06-06` | data limite ads + matrículas |
+| **Campanha fim** | `2026-06-08` | data limite ads + matrículas |
 | **Ticket** | `R$ 1.499,00` | preço da matrícula |
 
 ### Próximos produtos (descomentar em `lib/products.ts` quando entrarem)

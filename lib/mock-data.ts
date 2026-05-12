@@ -21,7 +21,7 @@ export const MOCK_KPIS = {
     ctr: 7.99,       ctrDelta: 7.8,
     cost: 920,       costDelta: -1.5,
   },
-  // Curso Claude Pro — campanha 11/05 → 06/06/2026
+  // Curso Claude Pro — campanha 11/05 → 08/06/2026
   // Valores iniciais zerados; dashboard receberá dados reais via:
   //   1. Webhooks de integracao-rd → /api/webhook/rd (Lead criado, Click WhatsApp)
   //   2. Cron de ingestão Meta Ads + Google Ads + GA4 (a partir de 11/05)
