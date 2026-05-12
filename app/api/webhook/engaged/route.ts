@@ -24,6 +24,7 @@ import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { PRODUCTS, type ProductConfig } from "@/lib/products";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -259,20 +260,65 @@ function pickAmount(p: Parsed): number {
   const directAmount = Number(p.amount ?? p.total ?? p.value ?? p.price ?? 0);
   if (directAmount > 0) return directAmount;
 
-  // 2) Engaged: valores nested em CENTAVOS — dividir por 100
+  // 2) Engaged: valores em CENTAVOS dentro de invoice/checkout
+  //    PRIORIDADE: paidAmount > totalAmount (apos desconto) > invoiceTotalAmount
+  //    NUNCA usar discountedAmount sozinho — esse eh o VALOR DO DESCONTO,
+  //    nao o pago. Ja deu bug em prod confundindo desconto com receita.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const invAny = (p.invoice ?? {}) as Record<string, any>;
   const cents =
-    p.invoice?.discountedAmount ??
+    invAny.paidAmount ??
+    invAny.totalAmount ??
     p.checkout?.invoiceTotalAmount ??
     p.checkout?.invoiceItemsAmount ??
+    invAny.discountedAmount ?? // fallback final (legado)
     0;
   if (cents > 0) return Number(cents) / 100;
 
   return 0;
 }
 
-function pickProductSlug(p: Parsed): string {
-  return p.product_slug || "claude-pro";
+/**
+ * Identifica qual produto IRIS esse webhook representa, baseado em sharedId
+ * + productId(s). Retorna null se nenhum produto configurado bate
+ * (geralmente webhook de OUTRO produto da Impacta — MBA, Faculdade, etc).
+ */
+function matchProduct(p: Parsed): ProductConfig | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ck = (p.checkout ?? {}) as Record<string, any>;
+  const sharedId = typeof ck.sharedId === "string" ? ck.sharedId : null;
+
+  // Coleta todos productIds presentes no payload (pode ter multi-item)
+  const productIds: string[] = [];
+  if (Array.isArray(ck.invoiceItems)) {
+    for (const item of ck.invoiceItems) {
+      const pid = item?.product?._id;
+      if (typeof pid === "string") productIds.push(pid);
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const invAny = (p.invoice ?? {}) as Record<string, any>;
+  if (Array.isArray(invAny.items)) {
+    for (const item of invAny.items) {
+      const pid = item?.product?._id;
+      if (typeof pid === "string" && !productIds.includes(pid)) productIds.push(pid);
+    }
+  }
+
+  // Procura match em qualquer produto configurado
+  for (const product of Object.values(PRODUCTS)) {
+    const sharedMatch =
+      sharedId && product.engagedCheckoutSharedIds?.includes(sharedId);
+    const productMatch =
+      product.engagedProductIds &&
+      productIds.some((pid) => product.engagedProductIds!.includes(pid));
+    if (sharedMatch || productMatch) return product;
+  }
+  return null;
 }
+
+// REMOVIDO pickProductSlug — agora usamos matchProduct() que retorna o
+// ProductConfig completo baseado em sharedId/productId. Mais robusto.
 
 function pickSaleDate(p: Parsed): Date {
   const ts = p.paid_at || p.confirmed_at || p.occurred_at || p.created_at;
@@ -389,7 +435,29 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   const p = parsed.data;
   const status = pickStatus(p);
   const externalId = pickExternalId(p);
-  const productSlug = pickProductSlug(p);
+
+  // FILTRO DE PRODUTO — engaged manda webhooks de TODOS os produtos da
+  // Impacta pra mesma URL. Sem filtro, viramos coletor de vendas do MBA,
+  // Faculdade, etc. Identifica produto baseado em sharedId + productId.
+  const matchedProduct = matchProduct(p);
+  if (!matchedProduct) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ck = (p.checkout ?? {}) as Record<string, any>;
+    const desc = typeof ck.description === "string" ? ck.description : "unknown";
+    const sharedId = typeof ck.sharedId === "string" ? ck.sharedId : "unknown";
+    return {
+      statusCode: 200,
+      body: {
+        status: "ignored",
+        reason: `product_not_tracked (${desc}, sharedId=${sharedId})`,
+        externalId,
+      },
+      outcome: "ignored",
+      reason: `product_not_tracked:${sharedId}`,
+      externalId: externalId || undefined,
+    };
+  }
+  const productSlug = matchedProduct.slug;
 
   if (status && !PAID_STATUS.has(status)) {
     return {

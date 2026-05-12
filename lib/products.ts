@@ -36,6 +36,20 @@ export type ProductConfig = {
 
   /** Tag/label de UTM esperada nas LPs desse produto. */
   campaignSlug?: string;
+
+  /**
+   * SharedIDs do checkout Engaged que pertencem a esse produto.
+   * Engaged manda webhooks de TODOS os produtos da Impacta pra mesma URL —
+   * sem filtro, viramos coletor de vendas alheias (MBA, Faculdade, etc).
+   * O sharedId aparece em `checkout.sharedId` do payload.
+   */
+  engagedCheckoutSharedIds?: string[];
+
+  /**
+   * IDs do produto Engaged (`product._id` no payload) que pertencem a
+   * esse produto. Alternativa/complemento ao sharedId pra filtrar.
+   */
+  engagedProductIds?: string[];
 };
 
 export const PRODUCTS: Record<string, ProductConfig> = {
@@ -46,6 +60,8 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     metaCampaignFilter: "CLAUDEPRO",
     googleCampaignFilter: "CLAUDEPRO",
     campaignSlug: "claude-pro-maio-2026",
+    engagedCheckoutSharedIds: ["x68jpj7w3k"],
+    engagedProductIds: ["69fe28452501c7001ca77fe5"],
   },
   // Future products — descomentar quando entrarem:
   //
