@@ -55,6 +55,14 @@ const EventInput = z.object({
   currency: z.string().length(3).nullish(),
   ts: z.coerce.date().optional(),
   meta: z.record(z.string(), z.unknown()).nullish(),
+  // UTMs — capturados pela LP a partir da URL e persistidos em sessionStorage.
+  // Granularidade por canal (RD Station email, Google CPC, Meta organico, etc.)
+  utm_source: z.string().max(120).nullish(),
+  utm_medium: z.string().max(120).nullish(),
+  utm_campaign: z.string().max(200).nullish(),
+  utm_content: z.string().max(200).nullish(),
+  utm_term: z.string().max(200).nullish(),
+  referrer: z.string().max(500).nullish(),
 });
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -98,7 +106,8 @@ export async function POST(req: NextRequest) {
   const bucket = utcDayBucket(at);
 
   try {
-    // Upsert: increment contador do dia atual pra esse (productSlug, evento)
+    // (1) MetricSample — agregado por dia (rapido pro cockpit KPI cards).
+    // Upsert: increment contador do dia atual pra esse (productSlug, evento).
     const sample = await prisma.metricSample.upsert({
       where: {
         productSlug_source_metric_bucket_startsAt: {
@@ -128,8 +137,36 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // (2) VisitEvent — append granular pra analise por canal (UTM).
+    // Best-effort: nao falha o request se VisitEvent quebrar (legado funciona
+    // com MetricSample sozinho). Mas em condicao normal grava ambos.
+    let visitEventId: string | undefined;
+    try {
+      const ve = await prisma.visitEvent.create({
+        data: {
+          productSlug: data.product_slug,
+          eventName: data.event_name,
+          campaignSlug: data.campaign_slug ?? null,
+          pageUrl: data.page_url ?? null,
+          utmSource: data.utm_source ?? null,
+          utmMedium: data.utm_medium ?? null,
+          utmCampaign: data.utm_campaign ?? null,
+          utmContent: data.utm_content ?? null,
+          utmTerm: data.utm_term ?? null,
+          referrer: data.referrer ?? null,
+          value: data.value != null ? data.value.toString() : null,
+          currency: data.currency ?? null,
+          ts: at,
+        },
+      });
+      visitEventId = ve.id;
+    } catch (e) {
+      // Loga mas nao falha (cockpit antigo nao depende disso)
+      console.warn("[events] VisitEvent insert failed:", e instanceof Error ? e.message : e);
+    }
+
     return NextResponse.json(
-      { status: "ok", metric: sample.metric, value: Number(sample.value) },
+      { status: "ok", metric: sample.metric, value: Number(sample.value), visitEventId },
       { status: 200, headers }
     );
   } catch (err) {

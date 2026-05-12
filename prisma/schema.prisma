@@ -288,6 +288,37 @@ model WebhookLog {
 }
 
 // ============================================================
+// VISIT EVENTS — eventos granulares da LP com UTMs
+// ============================================================
+// MetricSample agrega contadores por dia (rapido pro cockpit), mas perde
+// dimensoes pra analise por canal. VisitEvent guarda CADA evento da LP
+// individualmente com UTMs/referrer pra responder "quantas visitas vieram
+// do RD Station?" sem rodar SQL no JSON.
+// Append-only: nunca atualizar, so insert. Retencao definida por job
+// separado (90 dias deve dar pra qualquer analise).
+model VisitEvent {
+  id           String   @id @default(cuid())
+  productSlug  String   // "claude-pro"
+  eventName    String   // lp_view | click_compra | click_consultor | click_whats | lead_form
+  campaignSlug String?  // slug interno IRIS (ex: claude-pro-maio-2026)
+  pageUrl      String?
+  utmSource    String?  // "google", "meta", "rd-station", "direct"
+  utmMedium    String?  // "cpc", "email", "social", "organic"
+  utmCampaign  String?  // valor do utm_campaign na URL
+  utmContent   String?
+  utmTerm      String?
+  referrer     String?  // document.referrer (50 chars)
+  value        Decimal? @db.Decimal(15, 2)
+  currency     String?
+  ts           DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([productSlug, eventName, ts])
+  @@index([productSlug, utmSource, utmMedium, ts])
+  @@index([productSlug, ts])
+}
+
+// ============================================================
 // AUTH — NextAuth (Auth.js v5) tables
 // ============================================================
 model User {

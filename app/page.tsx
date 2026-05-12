@@ -5,6 +5,7 @@ import { TabNav } from "@/components/TabNav";
 import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
+import { CaptacaoSourceTable } from "@/components/CaptacaoSourceTable";
 import { InsightItem } from "@/components/InsightItem";
 import { LeadsTable } from "@/components/LeadsTable";
 import { SalesTable } from "@/components/SalesTable";
@@ -165,6 +166,65 @@ export default async function CockpitPage({
     // tabela Sale nao existe ainda
   }
 
+  // ────────────────────────────────────────────────────────────────
+  // Detalhamento de captação por canal (UTM) — ultimos 7 dias
+  // Agrega VisitEvent (cada evento da LP) por (utmSource, utmMedium,
+  // utmCampaign). Sem dados ainda? array vazio → componente mostra
+  // placeholder "aguardando primeiro lp_view com UTM".
+  type CaptacaoRow = {
+    utmSource: string | null;
+    utmMedium: string | null;
+    utmCampaign: string | null;
+    visits: number;
+    clickCompra: number;
+    clickConsultor: number;
+    clickWhats: number;
+    leadForm: number;
+  };
+  const captacaoDays = 7;
+  let captacaoRows: CaptacaoRow[] = [];
+  try {
+    const from = new Date();
+    from.setUTCHours(0, 0, 0, 0);
+    from.setUTCDate(from.getUTCDate() - (captacaoDays - 1));
+    const grouped = await prisma.visitEvent.groupBy({
+      by: ["utmSource", "utmMedium", "utmCampaign", "eventName"],
+      where: { productSlug: slug, ts: { gte: from } },
+      _count: { _all: true },
+    });
+    const pivot = new Map<string, CaptacaoRow>();
+    const key = (s: string | null, m: string | null, c: string | null) =>
+      `${s ?? ""}|${m ?? ""}|${c ?? ""}`;
+    for (const r of grouped) {
+      const k = key(r.utmSource, r.utmMedium, r.utmCampaign);
+      let cur = pivot.get(k);
+      if (!cur) {
+        cur = {
+          utmSource: r.utmSource,
+          utmMedium: r.utmMedium,
+          utmCampaign: r.utmCampaign,
+          visits: 0,
+          clickCompra: 0,
+          clickConsultor: 0,
+          clickWhats: 0,
+          leadForm: 0,
+        };
+        pivot.set(k, cur);
+      }
+      const n = r._count._all;
+      switch (r.eventName) {
+        case "lp_view": cur.visits += n; break;
+        case "click_compra": cur.clickCompra += n; break;
+        case "click_consultor": cur.clickConsultor += n; break;
+        case "click_whats": cur.clickWhats += n; break;
+        case "lead_form": cur.leadForm += n; break;
+      }
+    }
+    captacaoRows = Array.from(pivot.values()).sort((a, b) => b.visits - a.visits);
+  } catch {
+    // tabela VisitEvent nao existe ainda (pre-migration)
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Topbar />
@@ -303,6 +363,7 @@ export default async function CockpitPage({
           eyebrow="Detalhamento de captação"
           title="Leads, canais e posição do CTA"
         >
+          <CaptacaoSourceTable rows={captacaoRows} days={captacaoDays} />
           <LeadsTable leads={leadsRecent} totalCount={leadsCount} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ChannelTable rows={[...channels]} />
