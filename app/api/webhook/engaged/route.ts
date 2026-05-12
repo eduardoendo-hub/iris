@@ -124,6 +124,33 @@ const EngagedWebhook = z
       .passthrough()
       .optional(),
 
+    // ENGAGED real schema: user (account) + userPaymentProfile (billing info)
+    user: z
+      .object({
+        _id: z.string().optional(),
+        name: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+        document: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+    userPaymentProfile: z
+      .object({
+        _id: z.string().optional(),
+        name: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+        document: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+    // Engaged: queryParams contem UTMs do redirect da LP pra recuperar
+    // origem da venda no IRIS
+    queryParams: z.record(z.string(), z.unknown()).optional(),
+
     // Datas
     paid_at: z.string().optional(),
     confirmed_at: z.string().optional(),
@@ -188,6 +215,10 @@ function pickExternalId(p: Parsed): string | null {
 
 function pickName(p: Parsed): string {
   return (
+    // Engaged real: user.name eh a fonte primaria
+    p.user?.name ||
+    p.userPaymentProfile?.name ||
+    // Outros gateways / fallbacks
     p.customer?.name ||
     p.customer_name ||
     p.buyer?.name ||
@@ -199,6 +230,8 @@ function pickName(p: Parsed): string {
 
 function pickEmail(p: Parsed): string | null {
   return (
+    p.user?.email ||
+    p.userPaymentProfile?.email ||
     p.customer?.email ||
     p.customer_email ||
     p.buyer?.email ||
@@ -210,6 +243,8 @@ function pickEmail(p: Parsed): string | null {
 
 function pickPhone(p: Parsed): string | null {
   return (
+    p.user?.phone ||
+    p.userPaymentProfile?.phone ||
     p.customer?.phone ||
     p.customer_phone ||
     p.buyer?.phone ||
@@ -248,13 +283,18 @@ function pickSaleDate(p: Parsed): Date {
 
 function pickNotes(p: Parsed): string {
   const utm = p.utm || {};
-  const utmSrc = utm.source || p.utm_source;
-  const utmCamp = utm.campaign || p.utm_campaign;
+  // Engaged: queryParams pode conter UTMs do redirect da LP
+  const q = (p.queryParams || {}) as Record<string, unknown>;
+  const utmSrc =
+    utm.source || p.utm_source || (typeof q.utm_source === "string" ? q.utm_source : undefined);
+  const utmCamp =
+    utm.campaign || p.utm_campaign || (typeof q.utm_campaign === "string" ? q.utm_campaign : undefined);
+  const utmCnt = typeof q.utm_content === "string" ? q.utm_content : undefined;
   const status = pickStatus(p);
   const parts = [
     `Engaged ${status}`,
     p.payment_id ? `pay:${p.payment_id}` : null,
-    utmSrc && utmCamp ? `utm:${utmSrc}/${utmCamp}` : null,
+    utmSrc && utmCamp ? `utm:${utmSrc}/${utmCamp}${utmCnt ? `/${utmCnt}` : ""}` : null,
   ].filter(Boolean);
   return parts.join(" · ");
 }
