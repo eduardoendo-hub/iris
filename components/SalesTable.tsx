@@ -199,7 +199,7 @@ export function SalesTable({
                         style={{
                           padding: "12px 16px",
                           fontFamily: "var(--font-mono)",
-                          color: "var(--fg2)",
+                          color: "var(--fg1)",
                           fontSize: 12,
                         }}
                       >
@@ -213,11 +213,11 @@ export function SalesTable({
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: "12px 16px", color: "var(--fg2)", fontSize: 12 }}>
+                      <td style={{ padding: "12px 16px", color: "var(--fg1)", fontSize: 12 }}>
                         {s.customerEmail && <div>{s.customerEmail}</div>}
-                        {s.customerPhone && <div style={{ opacity: 0.7 }}>{s.customerPhone}</div>}
+                        {s.customerPhone && <div>{s.customerPhone}</div>}
                         {!s.customerEmail && !s.customerPhone && (
-                          <span style={{ opacity: 0.4 }}>—</span>
+                          <span style={{ color: "var(--fg2)" }}>—</span>
                         )}
                       </td>
                       <td style={{ padding: "12px 16px" }}>
