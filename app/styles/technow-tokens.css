@@ -30,7 +30,10 @@
   --bg-surface-2:     var(--tn-surface-2);
 
   --fg1:              var(--tn-pearl);
-  --fg2:              var(--tn-muted);
+  /* --fg2 era --tn-muted (#1A3535 — quase invisivel contra fundo dark).
+     Agora --tn-pearl-9ABABA (#9ABABA — cinza claro com contraste decente).
+     Mantem hierarquia: fg1=branco, fg2=cinza claro, fg3=muted2 (deco). */
+  --fg2:              var(--tn-pearl-9ABABA);
   --fg3:              var(--tn-muted-2);
   --fg-on-brand:      var(--tn-deep-teal);
 
