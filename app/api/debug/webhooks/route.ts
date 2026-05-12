@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         externalId: l.externalId,
         saleId: l.saleId,
         headers: l.headers,
-        rawBody: typeof l.rawBody === "string" ? l.rawBody.slice(0, 2000) : l.rawBody,
+        rawBody: typeof l.rawBody === "string" ? l.rawBody : l.rawBody,
         resultJson: l.resultJson,
       })),
       total: logs.length,

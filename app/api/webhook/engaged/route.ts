@@ -67,12 +67,62 @@ const EngagedWebhook = z
     email: z.string().optional(),
     phone: z.string().optional(),
 
-    // Valor — em Reais (Engaged provavelmente usa Real direto, não centavos)
+    // Valor — em Reais (campos comuns no payload raiz)
     amount: z.coerce.number().optional(),
     total: z.coerce.number().optional(),
     value: z.coerce.number().optional(),
     price: z.coerce.number().optional(),
     currency: z.string().default("BRL"),
+
+    // ENGAGED — payload real usa _id na raiz + invoice/checkout nested
+    _id: z.union([z.string(), z.number().transform(String)]).optional(),
+    eventType: z.string().optional(),
+
+    // Engaged: invoice nested com discountedAmount (em CENTAVOS)
+    invoice: z
+      .object({
+        _id: z.union([z.string(), z.number().transform(String)]).optional(),
+        discountedAmount: z.number().optional(),
+        items: z.array(z.unknown()).optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+
+    // Engaged: checkout nested com invoiceTotalAmount (em CENTAVOS)
+    checkout: z
+      .object({
+        _id: z.union([z.string(), z.number().transform(String)]).optional(),
+        invoiceTotalAmount: z.number().optional(),
+        invoiceItemsAmount: z.number().optional(),
+        status: z.string().optional(),
+        description: z.string().optional(),
+        sharedId: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+
+    // Engaged: buyer/payer info (nome varia conforme plataforma)
+    buyer: z
+      .object({
+        name: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+        document: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+    payer: z
+      .object({
+        name: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
 
     // Datas
     paid_at: z.string().optional(),
@@ -104,27 +154,85 @@ const EngagedWebhook = z
 type Parsed = z.infer<typeof EngagedWebhook>;
 
 function pickStatus(p: Parsed): string {
-  return (p.status || p.payment_status || p.event || p.event_type || p.type || "").toLowerCase();
+  // Engaged manda eventType "purchase.paid" — pega depois do ponto
+  const eventType = (p.eventType || "").toLowerCase();
+  if (eventType.includes(".")) {
+    const suffix = eventType.split(".").pop() || "";
+    if (suffix) return suffix; // "purchase.paid" -> "paid"
+  }
+  return (
+    p.status ||
+    p.payment_status ||
+    p.event ||
+    p.event_type ||
+    p.type ||
+    eventType ||
+    ""
+  ).toLowerCase();
 }
 
 function pickExternalId(p: Parsed): string | null {
-  return p.order_id || p.payment_id || p.transaction_id || p.invoice_id || p.id || null;
+  // Engaged: usa _id na raiz como ID do evento de webhook
+  return (
+    p.order_id ||
+    p.payment_id ||
+    p.transaction_id ||
+    p.invoice_id ||
+    p.id ||
+    p._id ||
+    p.invoice?._id ||
+    p.checkout?._id ||
+    null
+  );
 }
 
 function pickName(p: Parsed): string {
-  return p.customer?.name || p.customer_name || p.name || "Cliente Engaged";
+  return (
+    p.customer?.name ||
+    p.customer_name ||
+    p.buyer?.name ||
+    p.payer?.name ||
+    p.name ||
+    "Cliente Engaged"
+  );
 }
 
 function pickEmail(p: Parsed): string | null {
-  return p.customer?.email || p.customer_email || p.email || null;
+  return (
+    p.customer?.email ||
+    p.customer_email ||
+    p.buyer?.email ||
+    p.payer?.email ||
+    p.email ||
+    null
+  );
 }
 
 function pickPhone(p: Parsed): string | null {
-  return p.customer?.phone || p.customer_phone || p.phone || null;
+  return (
+    p.customer?.phone ||
+    p.customer_phone ||
+    p.buyer?.phone ||
+    p.payer?.phone ||
+    p.phone ||
+    null
+  );
 }
 
 function pickAmount(p: Parsed): number {
-  return Number(p.amount ?? p.total ?? p.value ?? p.price ?? 0);
+  // 1) Campos diretos em Reais (outros gateways)
+  const directAmount = Number(p.amount ?? p.total ?? p.value ?? p.price ?? 0);
+  if (directAmount > 0) return directAmount;
+
+  // 2) Engaged: valores nested em CENTAVOS — dividir por 100
+  const cents =
+    p.invoice?.discountedAmount ??
+    p.checkout?.invoiceTotalAmount ??
+    p.checkout?.invoiceItemsAmount ??
+    0;
+  if (cents > 0) return Number(cents) / 100;
+
+  return 0;
 }
 
 function pickProductSlug(p: Parsed): string {
