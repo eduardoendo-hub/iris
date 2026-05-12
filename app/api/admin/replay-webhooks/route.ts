@@ -16,6 +16,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { processEngagedPayload } from "@/app/api/webhook/engaged/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,11 +72,6 @@ export async function POST(req: NextRequest) {
     error?: string;
   }> = [];
 
-  // Determina origem (host) da request original via headers pra reconstruir POST
-  const internalUrl = new URL(req.url);
-  const baseUrl = `${internalUrl.protocol}//${internalUrl.host}`;
-  const webhookUrl = `${baseUrl}/api/webhook/${source}`;
-
   for (const log of logs) {
     try {
       if (dryRun) {
@@ -88,27 +84,48 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Reprocessa via POST interno usando Bearer auth (mesmo formato Engaged)
-      const engagedSecret = process.env.ENGAGED_WEBHOOK_SECRET || "";
-      const r = await fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${engagedSecret}`,
-          "User-Agent": "iris-replay/1.0",
-        },
-        body: log.rawBody,
-      });
-      const respJson = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+      // Reprocessa via chamada DIRETA da funcao (sem HTTP self-call que
+      // falha em ambiente Coolify/Docker pra mesmo container)
+      if (source !== "engaged") {
+        results.push({
+          logId: log.id,
+          receivedAt: log.receivedAt,
+          action: "skipped",
+          outcome: "unsupported_source",
+          error: `Replay so suporta source=engaged por enquanto`,
+        });
+        continue;
+      }
+
+      const r = await processEngagedPayload(log.rawBody);
+
+      // Atualiza o log original com o novo outcome
+      await prisma.webhookLog
+        .update({
+          where: { id: log.id },
+          data: {
+            statusCode: r.statusCode,
+            resultJson: r.body as never,
+            outcome: r.outcome,
+            reason: r.reason ? `[replay] ${r.reason}` : `[replay]`,
+            saleId: r.saleId,
+            externalId: r.externalId,
+          },
+        })
+        .catch(() => {
+          /* ignore log update errors */
+        });
+
       results.push({
         logId: log.id,
         receivedAt: log.receivedAt,
         action: "replayed",
-        outcome: r.ok ? String(respJson.status || "ok") : `error_${r.status}`,
-        saleId: typeof respJson.id === "string" ? respJson.id : undefined,
-        externalId:
-          typeof respJson.externalId === "string" ? respJson.externalId : undefined,
-        error: !r.ok ? String(respJson.error || respJson.message || "") : undefined,
+        outcome: r.outcome,
+        saleId: r.saleId,
+        externalId: r.externalId,
+        error: r.reason && r.outcome !== "created" && r.outcome !== "updated" && r.outcome !== "ignored"
+          ? r.reason
+          : undefined,
       });
     } catch (err) {
       results.push({

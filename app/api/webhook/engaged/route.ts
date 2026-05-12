@@ -353,6 +353,125 @@ function captureHeaders(req: NextRequest): Record<string, string> {
   return out;
 }
 
+/**
+ * Processa o rawBody do payload Engaged e cria/atualiza Sale no DB.
+ * Exportada pra reuso pelo endpoint /api/admin/replay-webhooks
+ * (chamada direta sem HTTP self-call, que falha em ambiente Coolify).
+ */
+export async function processEngagedPayload(rawBody: string): Promise<{
+  statusCode: number;
+  body: Record<string, unknown>;
+  outcome: string;
+  reason?: string;
+  saleId?: string;
+  externalId?: string;
+}> {
+  let json: unknown;
+  try {
+    json = JSON.parse(rawBody);
+  } catch {
+    return {
+      statusCode: 400,
+      body: { error: "invalid_json" },
+      outcome: "validation_failed",
+      reason: "invalid_json",
+    };
+  }
+  const parsed = EngagedWebhook.safeParse(json);
+  if (!parsed.success) {
+    return {
+      statusCode: 422,
+      body: { error: "validation_error", issues: parsed.error.issues },
+      outcome: "validation_failed",
+      reason: "schema_mismatch",
+    };
+  }
+  const p = parsed.data;
+  const status = pickStatus(p);
+  const externalId = pickExternalId(p);
+  const productSlug = pickProductSlug(p);
+
+  if (status && !PAID_STATUS.has(status)) {
+    return {
+      statusCode: 200,
+      body: { status: "ignored", reason: `status_not_paid (${status})`, externalId },
+      outcome: "ignored",
+      reason: `status_not_paid:${status}`,
+      externalId: externalId || undefined,
+    };
+  }
+
+  const data = {
+    productSlug,
+    source: "ENGAGED" as const,
+    customerName: pickName(p),
+    customerEmail: pickEmail(p),
+    customerPhone: pickPhone(p),
+    amount: pickAmount(p),
+    currency: (p.currency || "BRL").toUpperCase(),
+    externalId,
+    externalRef: p.payment_id || null,
+    notes: pickNotes(p),
+    saleDate: pickSaleDate(p),
+  };
+
+  if (data.amount <= 0) {
+    return {
+      statusCode: 422,
+      body: { error: "invalid_amount", amount: data.amount, externalId },
+      outcome: "validation_failed",
+      reason: "invalid_amount",
+      externalId: externalId || undefined,
+    };
+  }
+
+  try {
+    let sale;
+    if (externalId) {
+      const existing = await prisma.sale.findFirst({
+        where: { source: "ENGAGED", externalId },
+      });
+      if (existing) {
+        sale = await prisma.sale.update({
+          where: { id: existing.id },
+          data: {
+            customerName: data.customerName,
+            customerEmail: data.customerEmail,
+            customerPhone: data.customerPhone,
+            amount: data.amount,
+            currency: data.currency,
+            notes: data.notes,
+            saleDate: data.saleDate,
+          },
+        });
+        return {
+          statusCode: 200,
+          body: { status: "updated", id: sale.id, externalId },
+          outcome: "updated",
+          saleId: sale.id,
+          externalId: externalId || undefined,
+        };
+      }
+    }
+    sale = await prisma.sale.create({ data });
+    return {
+      statusCode: 201,
+      body: { status: "created", id: sale.id, externalId },
+      outcome: "created",
+      saleId: sale.id,
+      externalId: externalId || undefined,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      statusCode: 500,
+      body: { error: "db_error", message: msg },
+      outcome: "error",
+      reason: msg.slice(0, 200),
+    };
+  }
+}
+
 async function logWebhook(opts: {
   rawBody: string;
   headers: Record<string, string>;
@@ -434,114 +553,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let json: unknown;
-  try {
-    json = JSON.parse(rawBody);
-  } catch {
-    const result = { error: "invalid_json" };
-    await logWebhook({
-      rawBody, headers: reqHeaders, statusCode: 400, resultJson: result,
-      outcome: "validation_failed", reason: "invalid_json",
-    });
-    return NextResponse.json(result, { status: 400 });
-  }
-  const parsed = EngagedWebhook.safeParse(json);
-  if (!parsed.success) {
-    const result = { error: "validation_error", issues: parsed.error.issues };
-    await logWebhook({
-      rawBody, headers: reqHeaders, statusCode: 422, resultJson: result,
-      outcome: "validation_failed", reason: "schema_mismatch",
-    });
-    return NextResponse.json(result, { status: 422 });
-  }
-  const p = parsed.data;
-
-  const status = pickStatus(p);
-  const externalId = pickExternalId(p);
-  const productSlug = pickProductSlug(p);
-
-  // Status filter — soh cria Sale quando pagamento confirmado
-  if (status && !PAID_STATUS.has(status)) {
-    const result = { status: "ignored", reason: `status_not_paid (${status})`, externalId };
-    await logWebhook({
-      rawBody, headers: reqHeaders, statusCode: 200, resultJson: result,
-      outcome: "ignored", reason: `status_not_paid:${status}`, externalId: externalId || undefined,
-    });
-    return NextResponse.json(result, { status: 200 });
-  }
-
-  if (!externalId) {
-    // Sem ID externo eh dificil garantir idempotencia; aceita mas avisa
-    console.warn("[engaged-webhook] payload sem externalId — possivel duplicata futura");
-  }
-
-  const data = {
-    productSlug,
-    source: "ENGAGED" as const,
-    customerName: pickName(p),
-    customerEmail: pickEmail(p),
-    customerPhone: pickPhone(p),
-    amount: pickAmount(p),
-    currency: (p.currency || "BRL").toUpperCase(),
-    externalId,
-    externalRef: p.payment_id || null,
-    notes: pickNotes(p),
-    saleDate: pickSaleDate(p),
-  };
-
-  if (data.amount <= 0) {
-    const result = { error: "invalid_amount", amount: data.amount, externalId };
-    await logWebhook({
-      rawBody, headers: reqHeaders, statusCode: 422, resultJson: result,
-      outcome: "validation_failed", reason: "invalid_amount", externalId: externalId || undefined,
-    });
-    return NextResponse.json(result, { status: 422 });
-  }
-
-  try {
-    // Idempotencia manual: se ja tem Sale com mesmo externalId+source, atualiza
-    let sale;
-    if (externalId) {
-      const existing = await prisma.sale.findFirst({
-        where: { source: "ENGAGED", externalId },
-      });
-      if (existing) {
-        sale = await prisma.sale.update({
-          where: { id: existing.id },
-          data: {
-            customerName: data.customerName,
-            customerEmail: data.customerEmail,
-            customerPhone: data.customerPhone,
-            amount: data.amount,
-            currency: data.currency,
-            notes: data.notes,
-            saleDate: data.saleDate,
-          },
-        });
-        const result = { status: "updated", id: sale.id, externalId };
-        await logWebhook({
-          rawBody, headers: reqHeaders, statusCode: 200, resultJson: result,
-          outcome: "updated", saleId: sale.id, externalId: externalId || undefined,
-        });
-        return NextResponse.json(result, { status: 200 });
-      }
-    }
-    sale = await prisma.sale.create({ data });
-    const result = { status: "created", id: sale.id, externalId };
-    await logWebhook({
-      rawBody, headers: reqHeaders, statusCode: 201, resultJson: result,
-      outcome: "created", saleId: sale.id, externalId: externalId || undefined,
-    });
-    return NextResponse.json(result, { status: 201 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const result = { error: "db_error", message: msg };
-    await logWebhook({
-      rawBody, headers: reqHeaders, statusCode: 500, resultJson: result,
-      outcome: "error", reason: msg.slice(0, 200),
-    });
-    return NextResponse.json(result, { status: 500 });
-  }
+  // Processa via funcao extraida (compartilhada com replay endpoint)
+  const result = await processEngagedPayload(rawBody);
+  await logWebhook({
+    rawBody,
+    headers: reqHeaders,
+    statusCode: result.statusCode,
+    resultJson: result.body,
+    outcome: result.outcome,
+    reason: result.reason,
+    saleId: result.saleId,
+    externalId: result.externalId,
+  });
+  return NextResponse.json(result.body, { status: result.statusCode });
 }
 
 // GET pra debug rapido (so retorna config status, sem secret)
