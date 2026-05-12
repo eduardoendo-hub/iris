@@ -28,8 +28,12 @@ export const dynamic = "force-dynamic";
 
 // LPs autorizadas a postar eventos. Adicionar novas LPs aqui.
 const ALLOWED_ORIGINS = new Set([
-  "https://claude.technowhub.ai",
+  // Curso Claude Pro
+  "https://claude.impacta.com.br",       // canonico (branding Impacta)
+  "https://claude.technowhub.ai",        // alias hosted (mesma LP)
+  // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
+  // Dev
   "http://localhost:3000",
   "http://localhost:8080",
 ]);
