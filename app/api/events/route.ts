@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { spDayBucketFromInstant } from "@/lib/time-buckets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,9 +77,9 @@ function corsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
-function utcDayBucket(at: Date): Date {
-  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate(), 0, 0, 0));
-}
+// Bucket DAY agora em SP (= UTC-3). Antes: utcDayBucket fazia midnight UTC,
+// o que jogava todos os eventos da manha SP no dia anterior na view analitica.
+// Ver lib/time-buckets.ts.
 
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
   }
   const data = parsed.data;
   const at = data.ts ?? new Date();
-  const bucket = utcDayBucket(at);
+  const bucket = spDayBucketFromInstant(at);
 
   try {
     // (1) MetricSample — agregado por dia (rapido pro cockpit KPI cards).

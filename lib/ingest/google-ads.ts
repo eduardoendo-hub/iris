@@ -21,6 +21,7 @@
 import { GoogleAdsApi, type Customer } from "google-ads-api";
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
+import { spDayBucketFromYMD } from "@/lib/time-buckets";
 
 function loadConfig(productSlug: string) {
   const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
@@ -73,10 +74,7 @@ function getCustomer(productSlug: string): Customer {
   });
 }
 
-function utcDayBucket(ymd: string): Date {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
-}
+// Bucket DAY em SP (= UTC-3). Antes: midnight UTC quebrava view analitica.
 
 export type GoogleAdsIngestResult = {
   productSlug: string;
@@ -165,7 +163,7 @@ export async function ingestGoogleAds(opts: {
   const details: GoogleAdsIngestResult["details"] = [];
 
   for (const [date, agg] of byDay.entries()) {
-    const startsAt = utcDayBucket(date);
+    const startsAt = spDayBucketFromYMD(date);
     const metrics = [
       { metric: "spend", value: agg.spend, unit: "BRL" },
       { metric: "impressions", value: agg.impressions, unit: "count" },

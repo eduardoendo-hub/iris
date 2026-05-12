@@ -21,6 +21,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
+import { spDayBucketFromYMD } from "@/lib/time-buckets";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -126,9 +127,9 @@ async function fetchInsights(days: number, productSlug: string): Promise<DailyIn
   return rows;
 }
 
+// Bucket DAY agora em SP. Antes: midnight UTC quebrava view analitica (-3h shift).
 function ymdToBucketStart(date: string): Date {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  return spDayBucketFromYMD(date);
 }
 
 export type MetaIngestResult = {

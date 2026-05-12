@@ -13,6 +13,7 @@
  */
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
 import { prisma } from "@/lib/prisma";
+import { spDayBucketFromYMD } from "@/lib/time-buckets";
 
 const GA4_EVENTS = [
   "lp_view",
@@ -102,14 +103,13 @@ async function fetchCustomEvents(days: number): Promise<
 }
 
 /**
- * GA4 retorna date como "YYYYMMDD" string. Convertemos pra UTC midnight do dia
- * (GA4 usa timezone da property, mas pra DAY bucket nao precisa exato).
+ * GA4 retorna date como "YYYYMMDD" string. Convertemos pra bucket DAY SP
+ * (= midnight SP = Day X 03:00 UTC) — assim a view analitica formata
+ * direitinho no fuso SP.
  */
 function ga4DateToBucketStart(date: string): Date {
-  const y = Number(date.slice(0, 4));
-  const m = Number(date.slice(4, 6));
-  const d = Number(date.slice(6, 8));
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  const ymd = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  return spDayBucketFromYMD(ymd);
 }
 
 /**
