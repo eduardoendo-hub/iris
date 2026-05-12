@@ -445,15 +445,35 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     const ck = (p.checkout ?? {}) as Record<string, any>;
     const desc = typeof ck.description === "string" ? ck.description : "unknown";
     const sharedId = typeof ck.sharedId === "string" ? ck.sharedId : "unknown";
+
+    // IDEMPOTENCIA: se ja existe Sale com esse externalId (criada antes do
+    // filtro entrar em vigor — ex: MBA leaked como Claude Pro), removemos.
+    // Replay desse webhook precisa "consertar o historico", nao so marcar
+    // o log como ignored.
+    let deletedSaleId: string | undefined;
+    if (externalId) {
+      const orphan = await prisma.sale.findFirst({
+        where: { source: "ENGAGED", externalId },
+        select: { id: true },
+      });
+      if (orphan) {
+        await prisma.sale.delete({ where: { id: orphan.id } });
+        deletedSaleId = orphan.id;
+      }
+    }
+
     return {
       statusCode: 200,
       body: {
         status: "ignored",
         reason: `product_not_tracked (${desc}, sharedId=${sharedId})`,
         externalId,
+        deletedSaleId,
       },
       outcome: "ignored",
-      reason: `product_not_tracked:${sharedId}`,
+      reason: deletedSaleId
+        ? `product_not_tracked:${sharedId} (orphan_sale_deleted=${deletedSaleId})`
+        : `product_not_tracked:${sharedId}`,
       externalId: externalId || undefined,
     };
   }
