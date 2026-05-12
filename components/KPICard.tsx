@@ -13,6 +13,8 @@ export function KPICard({
   icon,
   splits,
   emphasis = "normal",
+  secondaryValue,
+  secondaryLabel,
 }: {
   label: string;
   value: number | null;
@@ -23,6 +25,9 @@ export function KPICard({
   splits?: KpiSplit[];
   /** "strong" deixa a cor de fundo mais clara — usado no bloco de Vendas pra dar destaque executivo */
   emphasis?: "normal" | "strong";
+  /** Segundo valor mostrado embaixo do valor principal — ex: "no mes: R$ 1.234,56". */
+  secondaryValue?: number | null;
+  secondaryLabel?: string;
 }) {
   const formatted = value === null ? "—" : formatValue(value, format);
   const deltaColor =
@@ -89,6 +94,34 @@ export function KPICard({
         )}
       </div>
       {hint && <span style={{ color: "var(--fg2)", fontSize: 11 }}>{hint}</span>}
+
+      {secondaryValue != null && (
+        <div className="flex items-baseline gap-2">
+          {secondaryLabel && (
+            <span
+              style={{
+                color: "var(--fg2)",
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: "var(--ls-eyebrow)",
+                fontWeight: 600,
+              }}
+            >
+              {secondaryLabel}
+            </span>
+          )}
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 14,
+              fontWeight: 600,
+              color: "var(--fg1)",
+            }}
+          >
+            {formatValue(secondaryValue, format)}
+          </span>
+        </div>
+      )}
 
       {splits && splits.length > 0 && (
         <div

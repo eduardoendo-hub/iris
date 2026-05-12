@@ -208,7 +208,7 @@ export function SalesTable({
                       <td style={{ padding: "12px 16px", color: "var(--fg1)", fontWeight: 600 }}>
                         {s.customerName}
                         {s.notes && (
-                          <div style={{ fontSize: 10, opacity: 0.5, fontWeight: 400, marginTop: 2 }}>
+                          <div style={{ fontSize: 10, color: "var(--fg2)", fontWeight: 400, marginTop: 2 }}>
                             {s.notes.slice(0, 80)}
                           </div>
                         )}

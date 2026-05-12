@@ -79,21 +79,21 @@ export function LeadsTable({ leads, totalCount }: { leads: LeadRow[]; totalCount
               {leads.map((l) => (
                 <tr key={l.id} style={{ borderTop: "1px solid var(--cockpit-border)" }}>
                   <td style={{ padding: "12px 16px", color: "var(--fg1)", fontWeight: 600 }}>
-                    {l.name || <span style={{ opacity: 0.5 }}>—</span>}
+                    {l.name || <span style={{ color: "var(--fg2)" }}>—</span>}
                   </td>
-                  <td style={{ padding: "12px 16px", color: "var(--fg2)", fontSize: 12 }}>
+                  <td style={{ padding: "12px 16px", color: "var(--fg1)", fontSize: 12 }}>
                     {l.email && <div>{l.email}</div>}
-                    {l.phone && <div style={{ opacity: 0.7 }}>{l.phone}</div>}
+                    {l.phone && <div>{l.phone}</div>}
                   </td>
-                  <td style={{ padding: "12px 16px", color: "var(--fg2)", fontSize: 11 }}>
+                  <td style={{ padding: "12px 16px", color: "var(--fg1)", fontSize: 11 }}>
                     {l.utmSource || l.utmMedium || l.utmCampaign ? (
                       <div>
                         {l.utmSource && <span style={{ color: "var(--brand)" }}>{l.utmSource}</span>}
                         {l.utmMedium && <span> · {l.utmMedium}</span>}
-                        {l.utmCampaign && <div style={{ opacity: 0.6, fontSize: 10 }}>{l.utmCampaign}</div>}
+                        {l.utmCampaign && <div style={{ color: "var(--fg2)", fontSize: 10 }}>{l.utmCampaign}</div>}
                       </div>
                     ) : (
-                      <span style={{ opacity: 0.4 }}>direto</span>
+                      <span style={{ color: "var(--fg2)" }}>direto</span>
                     )}
                   </td>
                   <td style={{ padding: "12px 16px" }}>
@@ -139,10 +139,10 @@ export function LeadsTable({ leads, totalCount }: { leads: LeadRow[]; totalCount
                         </svg>
                       </a>
                     ) : (
-                      <span style={{ opacity: 0.4 }}>—</span>
+                      <span style={{ color: "var(--fg2)" }}>—</span>
                     )}
                   </td>
-                  <td style={{ padding: "12px 16px", textAlign: "right", color: "var(--fg2)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
+                  <td style={{ padding: "12px 16px", textAlign: "right", color: "var(--fg1)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
                     {formatDate(l.capturedAt)}
                   </td>
                 </tr>

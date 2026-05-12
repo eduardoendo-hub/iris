@@ -56,16 +56,23 @@ export default async function CockpitPage({
   let clicksConsultor = (kpi as { clicksConsultor?: number }).clicksConsultor ?? 0;
   let mediaInvestment =
     (kpi as { mediaInvestment?: number }).mediaInvestment ?? kpi.cost ?? 0;
+  let mediaInvestmentMonth = 0;
   let metricsSourceLabel = "mock";
   try {
-    // Soma os ULTIMOS 7 DIAS de cada metrica (DAY bucket) pro produto
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // Computa boundaries em SP — bucket startsAt agora salva "Day X 00:00 SP"
+    // (= Day X 03:00 UTC). Bate exato com o que vem do ingest.
+    const nowSP = new Date(Date.now() - 3 * 60 * 60 * 1000); // UTC - 3h = SP "local"
+    const todayUTC = new Date(Date.UTC(nowSP.getUTCFullYear(), nowSP.getUTCMonth(), nowSP.getUTCDate(), 3, 0, 0));
+    const monthStartUTC = new Date(Date.UTC(nowSP.getUTCFullYear(), nowSP.getUTCMonth(), 1, 3, 0, 0));
+    const sevenDaysAgoUTC = new Date(todayUTC.getTime() - 6 * 24 * 60 * 60 * 1000);
+
+    // Janelas: 7 dias (KPIs de captacao) + hoje (spend dia) + mes (spend mes)
     const samples = await prisma.metricSample.groupBy({
       by: ["metric", "source"],
       where: {
         productSlug: slug,
         bucket: "DAY",
-        startsAt: { gte: sevenDaysAgo },
+        startsAt: { gte: sevenDaysAgoUTC },
       },
       _sum: { value: true },
     });
@@ -81,14 +88,41 @@ export default async function CockpitPage({
     if (ga4Has("click_compra")) clicksCompra = byMetric["click_compra"];
     if (ga4Has("click_whats")) clicksWhats = byMetric["click_whats"];
     if (ga4Has("click_consultor")) clicksConsultor = byMetric["click_consultor"];
-    // mediaInvestment: soma spend de META + GOOGLE quando ingestaremos
-    const spendMeta =
-      samples.find((s) => s.source === "META_ADS" && s.metric === "spend")?._sum.value;
-    const spendGoogle =
-      samples.find((s) => s.source === "GOOGLE_ADS" && s.metric === "spend")?._sum.value;
-    if (spendMeta || spendGoogle) {
-      mediaInvestment = Number(spendMeta ?? 0) + Number(spendGoogle ?? 0);
-    }
+
+    // Spend HOJE — Meta + Google bucket=DAY com startsAt=hoje SP
+    const spendTodaySamples = await prisma.metricSample.groupBy({
+      by: ["source"],
+      where: {
+        productSlug: slug,
+        metric: "spend",
+        bucket: "DAY",
+        startsAt: todayUTC,
+        source: { in: ["META_ADS", "GOOGLE_ADS"] },
+      },
+      _sum: { value: true },
+    });
+    const spendTodayTotal = spendTodaySamples.reduce(
+      (acc, s) => acc + Number(s._sum.value ?? 0),
+      0
+    );
+    if (spendTodayTotal > 0) mediaInvestment = spendTodayTotal;
+
+    // Spend MES (do dia 1 ate hoje) — pra dar visao acumulada do investimento
+    const spendMonthSamples = await prisma.metricSample.groupBy({
+      by: ["source"],
+      where: {
+        productSlug: slug,
+        metric: "spend",
+        bucket: "DAY",
+        startsAt: { gte: monthStartUTC },
+        source: { in: ["META_ADS", "GOOGLE_ADS"] },
+      },
+      _sum: { value: true },
+    });
+    mediaInvestmentMonth = spendMonthSamples.reduce(
+      (acc, s) => acc + Number(s._sum.value ?? 0),
+      0
+    );
   } catch {
     // tabela MetricSample nao existe ainda — segue com mocks
   }
@@ -300,7 +334,9 @@ export default async function CockpitPage({
               value={mediaInvestment}
               format="currency"
               icon={<WalletIcon size={14} />}
-              hint="Meta + Google"
+              hint="hoje · Meta + Google"
+              secondaryValue={mediaInvestmentMonth}
+              secondaryLabel="no mês"
             />
           </div>
         </Section>
