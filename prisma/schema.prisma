@@ -261,6 +261,33 @@ enum MetricSource {
 }
 
 // ============================================================
+// WEBHOOK LOG — registra TODOS os webhooks que chegam no IRIS
+// (mesmo os que retornam ignored/error). Util pra debugar quando
+// integracao com Engaged/RD/outros parece nao estar funcionando.
+// Retem ultimos N dias automaticamente via cron de cleanup.
+// ============================================================
+model WebhookLog {
+  id          String   @id @default(cuid())
+  source      String   // "engaged" | "rd_crm" | etc
+  receivedAt  DateTime @default(now())
+  // Request data
+  headers     Json     // headers HTTP relevantes (sem authorization completa)
+  rawBody     String   @db.Text // body como recebido
+  // Response
+  statusCode  Int      // HTTP status retornado
+  resultJson  Json?    // resposta enviada ao caller
+  // Outcome
+  outcome     String   // "created" | "updated" | "ignored" | "auth_failed" | "validation_failed" | "error"
+  reason      String?  // detalhe (ex: "status_not_paid", "invalid_signature")
+  saleId      String?  // se criou Sale, ID dela
+  externalId  String?  // ID externo (order_id, etc) pra busca rapida
+
+  @@index([source, receivedAt])
+  @@index([outcome])
+  @@index([externalId])
+}
+
+// ============================================================
 // AUTH — NextAuth (Auth.js v5) tables
 // ============================================================
 model User {

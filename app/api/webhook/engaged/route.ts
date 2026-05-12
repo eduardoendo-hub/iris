@@ -176,9 +176,69 @@ function verifyBearer(provided: string | null, secret: string): boolean {
   }
 }
 
+/** Captura headers relevantes (sem expor secret completo) */
+function captureHeaders(req: NextRequest): Record<string, string> {
+  const interesting = [
+    "user-agent",
+    "content-type",
+    "x-engaged-signature",
+    "x-webhook-signature",
+    "x-hub-signature-256",
+    "authorization",
+    "x-engaged-secret",
+    "x-webhook-secret",
+    "x-forwarded-for",
+    "x-real-ip",
+  ];
+  const out: Record<string, string> = {};
+  for (const h of interesting) {
+    const v = req.headers.get(h);
+    if (v) {
+      // mascara secrets/tokens nos logs — guarda só primeiros/últimos chars
+      if (/(secret|signature|authorization)/i.test(h) && v.length > 12) {
+        out[h] = `${v.slice(0, 8)}...${v.slice(-4)} (len=${v.length})`;
+      } else {
+        out[h] = v;
+      }
+    }
+  }
+  return out;
+}
+
+async function logWebhook(opts: {
+  rawBody: string;
+  headers: Record<string, string>;
+  statusCode: number;
+  resultJson: unknown;
+  outcome: string;
+  reason?: string;
+  saleId?: string;
+  externalId?: string;
+}) {
+  try {
+    await prisma.webhookLog.create({
+      data: {
+        source: "engaged",
+        headers: opts.headers,
+        rawBody: opts.rawBody.slice(0, 10000), // cap em 10KB pra evitar bloat
+        statusCode: opts.statusCode,
+        resultJson: opts.resultJson as never,
+        outcome: opts.outcome,
+        reason: opts.reason,
+        saleId: opts.saleId,
+        externalId: opts.externalId,
+      },
+    });
+  } catch (err) {
+    // logging não deve quebrar o webhook se DB falhar
+    console.error("[webhook-log] failed to log:", err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   // Le body raw pra validar HMAC ANTES de parsear
   const rawBody = await req.text();
+  const reqHeaders = captureHeaders(req);
 
   // Auth: aceita 2 formatos pra flexibilidade com plataformas diferentes:
   //
@@ -210,13 +270,19 @@ export async function POST(req: NextRequest) {
     const bearerOk = bearerSecret ? verifyBearer(bearerSecret, secret) : false;
 
     if (!hmacOk && !bearerOk) {
-      return NextResponse.json(
-        {
-          error: "invalid_signature",
-          hint: "Use X-Engaged-Signature (HMAC-SHA256 do body) OU X-Engaged-Secret/Authorization: Bearer <token> com o secret cru.",
-        },
-        { status: 401 }
-      );
+      const result = {
+        error: "invalid_signature",
+        hint: "Use X-Engaged-Signature (HMAC-SHA256 do body) OU X-Engaged-Secret/Authorization: Bearer <token> com o secret cru.",
+      };
+      await logWebhook({
+        rawBody,
+        headers: reqHeaders,
+        statusCode: 401,
+        resultJson: result,
+        outcome: "auth_failed",
+        reason: hmacSig ? "hmac_mismatch" : bearerSecret ? "bearer_mismatch" : "no_auth_header",
+      });
+      return NextResponse.json(result, { status: 401 });
     }
   }
 
@@ -224,14 +290,21 @@ export async function POST(req: NextRequest) {
   try {
     json = JSON.parse(rawBody);
   } catch {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+    const result = { error: "invalid_json" };
+    await logWebhook({
+      rawBody, headers: reqHeaders, statusCode: 400, resultJson: result,
+      outcome: "validation_failed", reason: "invalid_json",
+    });
+    return NextResponse.json(result, { status: 400 });
   }
   const parsed = EngagedWebhook.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "validation_error", issues: parsed.error.issues },
-      { status: 422 }
-    );
+    const result = { error: "validation_error", issues: parsed.error.issues };
+    await logWebhook({
+      rawBody, headers: reqHeaders, statusCode: 422, resultJson: result,
+      outcome: "validation_failed", reason: "schema_mismatch",
+    });
+    return NextResponse.json(result, { status: 422 });
   }
   const p = parsed.data;
 
@@ -241,10 +314,12 @@ export async function POST(req: NextRequest) {
 
   // Status filter — soh cria Sale quando pagamento confirmado
   if (status && !PAID_STATUS.has(status)) {
-    return NextResponse.json(
-      { status: "ignored", reason: `status_not_paid (${status})`, externalId },
-      { status: 200 }
-    );
+    const result = { status: "ignored", reason: `status_not_paid (${status})`, externalId };
+    await logWebhook({
+      rawBody, headers: reqHeaders, statusCode: 200, resultJson: result,
+      outcome: "ignored", reason: `status_not_paid:${status}`, externalId: externalId || undefined,
+    });
+    return NextResponse.json(result, { status: 200 });
   }
 
   if (!externalId) {
@@ -267,10 +342,12 @@ export async function POST(req: NextRequest) {
   };
 
   if (data.amount <= 0) {
-    return NextResponse.json(
-      { error: "invalid_amount", amount: data.amount, externalId },
-      { status: 422 }
-    );
+    const result = { error: "invalid_amount", amount: data.amount, externalId };
+    await logWebhook({
+      rawBody, headers: reqHeaders, statusCode: 422, resultJson: result,
+      outcome: "validation_failed", reason: "invalid_amount", externalId: externalId || undefined,
+    });
+    return NextResponse.json(result, { status: 422 });
   }
 
   try {
@@ -293,14 +370,29 @@ export async function POST(req: NextRequest) {
             saleDate: data.saleDate,
           },
         });
-        return NextResponse.json({ status: "updated", id: sale.id, externalId }, { status: 200 });
+        const result = { status: "updated", id: sale.id, externalId };
+        await logWebhook({
+          rawBody, headers: reqHeaders, statusCode: 200, resultJson: result,
+          outcome: "updated", saleId: sale.id, externalId: externalId || undefined,
+        });
+        return NextResponse.json(result, { status: 200 });
       }
     }
     sale = await prisma.sale.create({ data });
-    return NextResponse.json({ status: "created", id: sale.id, externalId }, { status: 201 });
+    const result = { status: "created", id: sale.id, externalId };
+    await logWebhook({
+      rawBody, headers: reqHeaders, statusCode: 201, resultJson: result,
+      outcome: "created", saleId: sale.id, externalId: externalId || undefined,
+    });
+    return NextResponse.json(result, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "db_error", message: msg }, { status: 500 });
+    const result = { error: "db_error", message: msg };
+    await logWebhook({
+      rawBody, headers: reqHeaders, statusCode: 500, resultJson: result,
+      outcome: "error", reason: msg.slice(0, 200),
+    });
+    return NextResponse.json(result, { status: 500 });
   }
 }
 
