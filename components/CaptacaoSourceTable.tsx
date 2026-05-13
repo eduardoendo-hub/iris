@@ -1,23 +1,29 @@
 /**
- * CaptacaoSourceTable — tabela de visitas e cliques agrupados por canal (UTM).
+ * CaptacaoSourceTable — visitas e cliques agrupados por canal + campanha + anuncio.
  *
  * Server component: recebe rows ja agregados pelo /api/captacao (ou query
  * direta do server component). Mostra origem do trafego pra responder
- * "de onde vem cada lead?". Util pra decidir onde investir mais ou menos.
+ * "de onde vem cada lead?" e "qual peca esta performando melhor?".
  *
  * Colunas:
- *   Canal    — formato "utm_source / utm_medium" (ex: "RD Station / email")
- *   Campanha — utm_campaign (ex: "lancamento-claude-pro-mai26")
+ *   Canal    — formato "utm_source / utm_medium" (ex: "meta / cpc")
+ *   Campanha — utm_campaign (ex: "M1-PROSP-CLAUDEPRO-MAI26")
+ *   Anuncio  — utm_content (ex: "M1-VIDEO-CLAUDEPRO-PARE-PERGUNTAR")
  *   Visitas  — count de lp_view
- *   Compra   — count de click_compra (intent forte)
- *   Conv %   — clickCompra / visits (taxa de conversao do canal)
+ *   Compra   — count de click_compra
+ *   Conv %   — clickCompra / visits
  *
- * Quando nao tem dados (zero visitas no periodo) mostra placeholder.
+ * Ordenacao: campanha asc → visits desc (rows da mesma campanha ficam
+ * agrupados visualmente — sem precisar de nested rows).
+ *
+ * Detecta tambem macros nao-substituidas tipo "{{ad.name}}" (sinal que o
+ * Meta nao processou a URL — config errada na campanha).
  */
 type Row = {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
+  utmContent: string | null;
   visits: number;
   clickCompra: number;
   clickConsultor: number;
@@ -37,6 +43,11 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
     { visits: 0, clickCompra: 0, clickConsultor: 0, clickWhats: 0 }
   );
 
+  // Detecta macros nao-substituidas pelo Meta (config errada) — vamos avisar no UI
+  const macroLeaks = rows.filter((r) =>
+    [r.utmContent, r.utmCampaign].some((v) => v && /^\{\{.+\}\}$/.test(v))
+  ).length;
+
   return (
     <div
       className="rounded-xl overflow-hidden"
@@ -53,6 +64,20 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
           {fmtNum(totals.visits)} visitas · {fmtNum(totals.clickCompra)} cliques compra
         </span>
       </div>
+      {macroLeaks > 0 && (
+        <div
+          className="px-5 py-2"
+          style={{
+            background: "rgba(247,201,72,0.08)",
+            borderBottom: "1px solid var(--cockpit-border)",
+            color: "var(--tn-gold)",
+            fontSize: 11,
+          }}
+        >
+          ⚠️ {macroLeaks} {macroLeaks === 1 ? "linha contém" : "linhas contêm"} macro não substituída
+          ({"{{...}}"}) — confirme tracking template no Meta/Google Ads.
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full" style={{ borderCollapse: "collapse" }}>
           <thead>
@@ -68,6 +93,7 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
             >
               <th className="text-left px-5 py-2">Canal</th>
               <th className="text-left px-5 py-2">Campanha</th>
+              <th className="text-left px-5 py-2">Anúncio</th>
               <th className="text-right px-5 py-2">Visitas</th>
               <th className="text-right px-5 py-2">Compra</th>
               <th className="text-right px-5 py-2">Consultor</th>
@@ -78,7 +104,7 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center px-5 py-6" style={{ color: "var(--fg2)" }}>
+                <td colSpan={8} className="text-center px-5 py-6" style={{ color: "var(--fg2)" }}>
                   Sem visitas registradas no período. Aguardando primeiro lp_view com UTM.
                 </td>
               </tr>
@@ -86,10 +112,17 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
               rows.map((r, i) => {
                 const channel = formatChannel(r.utmSource, r.utmMedium);
                 const conv = r.visits > 0 ? (r.clickCompra / r.visits) * 100 : 0;
+                const isMacroLeak =
+                  (r.utmContent && /^\{\{.+\}\}$/.test(r.utmContent)) ||
+                  (r.utmCampaign && /^\{\{.+\}\}$/.test(r.utmCampaign));
                 return (
                   <tr
-                    key={`${r.utmSource}|${r.utmMedium}|${r.utmCampaign}|${i}`}
-                    style={{ borderTop: "1px solid var(--cockpit-border)", fontSize: 13 }}
+                    key={`${r.utmSource}|${r.utmMedium}|${r.utmCampaign}|${r.utmContent}|${i}`}
+                    style={{
+                      borderTop: "1px solid var(--cockpit-border)",
+                      fontSize: 13,
+                      background: isMacroLeak ? "rgba(247,201,72,0.04)" : undefined,
+                    }}
                   >
                     <td className="px-5 py-3" style={{ color: "var(--fg1)", fontWeight: 500 }}>
                       {channel}
@@ -99,6 +132,21 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
                       style={{ color: "var(--fg1)", fontFamily: "var(--font-mono)", fontSize: 12 }}
                     >
                       {r.utmCampaign || <span style={{ color: "var(--fg2)" }}>—</span>}
+                    </td>
+                    <td
+                      className="px-5 py-3"
+                      style={{
+                        color: isMacroLeak ? "var(--tn-gold)" : "var(--fg1)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 11,
+                        maxWidth: 260,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={r.utmContent || ""}
+                    >
+                      {r.utmContent || <span style={{ color: "var(--fg2)" }}>—</span>}
                     </td>
                     <td
                       className="px-5 py-3 text-right"
@@ -149,7 +197,6 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
 }
 
 function formatChannel(source: string | null, medium: string | null): string {
-  // Direct (sem UTM, sem referrer detectavel) = trafego direto/orgânico
   if (!source && !medium) return "Direto / orgânico";
   const s = source || "?";
   const m = medium || "?";

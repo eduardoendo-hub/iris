@@ -36,9 +36,10 @@ export async function GET(req: NextRequest) {
   const to = new Date();
 
   try {
-    // Group by (utmSource, utmMedium, utmCampaign, eventName) — depois pivota.
+    // Group by (utmSource, utmMedium, utmCampaign, utmContent, eventName) — depois pivota.
+    // utmContent = nome do anuncio (Meta substitui {{ad.name}} automaticamente).
     const rows = await prisma.visitEvent.groupBy({
-      by: ["utmSource", "utmMedium", "utmCampaign", "eventName"],
+      by: ["utmSource", "utmMedium", "utmCampaign", "utmContent", "eventName"],
       where: {
         productSlug: product,
         ts: { gte: from, lte: to },
@@ -46,13 +47,14 @@ export async function GET(req: NextRequest) {
       _count: { _all: true },
     });
 
-    // Pivota: cada (source, medium, campaign) vira uma linha com contadores
-    // por evento. Uso de string-key porque nulls precisam ser distinguiveis
-    // de string vazia.
+    // Pivota: cada (source, medium, campaign, content) vira uma linha com
+    // contadores por evento. Uso de string-key porque nulls precisam ser
+    // distinguiveis de string vazia.
     type Counts = {
       utmSource: string | null;
       utmMedium: string | null;
       utmCampaign: string | null;
+      utmContent: string | null;
       visits: number;
       clickCompra: number;
       clickConsultor: number;
@@ -60,16 +62,17 @@ export async function GET(req: NextRequest) {
       leadForm: number;
     };
     const pivot = new Map<string, Counts>();
-    const key = (s: string | null, m: string | null, c: string | null) =>
-      `${s ?? ""}|${m ?? ""}|${c ?? ""}`;
+    const key = (s: string | null, m: string | null, c: string | null, ct: string | null) =>
+      `${s ?? ""}|${m ?? ""}|${c ?? ""}|${ct ?? ""}`;
     for (const r of rows) {
-      const k = key(r.utmSource, r.utmMedium, r.utmCampaign);
+      const k = key(r.utmSource, r.utmMedium, r.utmCampaign, r.utmContent);
       let cur = pivot.get(k);
       if (!cur) {
         cur = {
           utmSource: r.utmSource,
           utmMedium: r.utmMedium,
           utmCampaign: r.utmCampaign,
+          utmContent: r.utmContent,
           visits: 0,
           clickCompra: 0,
           clickConsultor: 0,
@@ -97,7 +100,13 @@ export async function GET(req: NextRequest) {
           break;
       }
     }
-    const result = Array.from(pivot.values()).sort((a, b) => b.visits - a.visits);
+    // Sort: campanha asc → visits desc dentro da campanha
+    const result = Array.from(pivot.values()).sort((a, b) => {
+      const ca = a.utmCampaign ?? "";
+      const cb = b.utmCampaign ?? "";
+      if (ca !== cb) return ca.localeCompare(cb);
+      return b.visits - a.visits;
+    });
 
     return NextResponse.json({
       period: {

@@ -203,12 +203,14 @@ export default async function CockpitPage({
   // ────────────────────────────────────────────────────────────────
   // Detalhamento de captação por canal (UTM) — ultimos 7 dias
   // Agrega VisitEvent (cada evento da LP) por (utmSource, utmMedium,
-  // utmCampaign). Sem dados ainda? array vazio → componente mostra
-  // placeholder "aguardando primeiro lp_view com UTM".
+  // utmCampaign, utmContent). utmContent carrega o nome do anuncio
+  // (Meta substitui {{ad.name}} automaticamente) — permite ver qual peca
+  // ta performando melhor dentro de cada campanha.
   type CaptacaoRow = {
     utmSource: string | null;
     utmMedium: string | null;
     utmCampaign: string | null;
+    utmContent: string | null;
     visits: number;
     clickCompra: number;
     clickConsultor: number;
@@ -222,21 +224,22 @@ export default async function CockpitPage({
     from.setUTCHours(0, 0, 0, 0);
     from.setUTCDate(from.getUTCDate() - (captacaoDays - 1));
     const grouped = await prisma.visitEvent.groupBy({
-      by: ["utmSource", "utmMedium", "utmCampaign", "eventName"],
+      by: ["utmSource", "utmMedium", "utmCampaign", "utmContent", "eventName"],
       where: { productSlug: slug, ts: { gte: from } },
       _count: { _all: true },
     });
     const pivot = new Map<string, CaptacaoRow>();
-    const key = (s: string | null, m: string | null, c: string | null) =>
-      `${s ?? ""}|${m ?? ""}|${c ?? ""}`;
+    const key = (s: string | null, m: string | null, c: string | null, ct: string | null) =>
+      `${s ?? ""}|${m ?? ""}|${c ?? ""}|${ct ?? ""}`;
     for (const r of grouped) {
-      const k = key(r.utmSource, r.utmMedium, r.utmCampaign);
+      const k = key(r.utmSource, r.utmMedium, r.utmCampaign, r.utmContent);
       let cur = pivot.get(k);
       if (!cur) {
         cur = {
           utmSource: r.utmSource,
           utmMedium: r.utmMedium,
           utmCampaign: r.utmCampaign,
+          utmContent: r.utmContent,
           visits: 0,
           clickCompra: 0,
           clickConsultor: 0,
@@ -254,7 +257,13 @@ export default async function CockpitPage({
         case "lead_form": cur.leadForm += n; break;
       }
     }
-    captacaoRows = Array.from(pivot.values()).sort((a, b) => b.visits - a.visits);
+    // Sort: campanha asc (mesma campanha agrupada visualmente) → visits desc dentro da campanha
+    captacaoRows = Array.from(pivot.values()).sort((a, b) => {
+      const ca = a.utmCampaign ?? "";
+      const cb = b.utmCampaign ?? "";
+      if (ca !== cb) return ca.localeCompare(cb);
+      return b.visits - a.visits;
+    });
   } catch {
     // tabela VisitEvent nao existe ainda (pre-migration)
   }
