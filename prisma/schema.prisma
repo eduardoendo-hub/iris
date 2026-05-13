@@ -288,6 +288,41 @@ model WebhookLog {
 }
 
 // ============================================================
+// DAILY INSIGHT — análise estratégica diária gerada pela LLM
+// ============================================================
+// Agente roda 1x por dia (05:00 SP) por (produto, campanha), analisa
+// dados do dia anterior, gera headline + summary + recommendations.
+// Snapshot das métricas que alimentaram a análise vai em JSON pra
+// rastreabilidade (qual estado virou qual conclusão).
+model DailyInsight {
+  id              String   @id @default(cuid())
+  productSlug     String              // "claude-pro"
+  campaignSlug    String   @default("") // "" = analise produto-wide (nao null pq Prisma nao aceita nullable em compound unique)
+  analysisDate    DateTime            // dia analisado (midnight SP UTC = 03:00 UTC)
+  generatedAt     DateTime @default(now())
+
+  // Output da LLM
+  headline        String              // titulo curto (1 linha)
+  summary         String   @db.Text   // analise narrativa (3-5 linhas markdown)
+  recommendations Json                // [{priority:int, action:str, expected_impact:str}]
+  severity        String              // INFO | WARN | HIGH | CRITICAL
+
+  // Dados de entrada (auditoria)
+  metricsSnapshot Json                // pacote completo enviado ao prompt
+
+  // Metadata
+  model           String              // ex: "claude-opus-4-7"
+  tokensIn        Int?
+  tokensOut       Int?
+  cachedTokensRead Int?               // tokens lidos do cache (~0.1x cost)
+  promptVersion   String              // ex: "v1" — pra re-rodar quando trocar prompt
+
+  @@unique([productSlug, campaignSlug, analysisDate])
+  @@index([productSlug, analysisDate])
+  @@index([generatedAt])
+}
+
+// ============================================================
 // VISIT EVENTS — eventos granulares da LP com UTMs
 // ============================================================
 // MetricSample agrega contadores por dia (rapido pro cockpit), mas perde

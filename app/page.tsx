@@ -6,6 +6,7 @@ import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
 import { CaptacaoSourceTable } from "@/components/CaptacaoSourceTable";
+import { DailyInsightCard } from "@/components/DailyInsightCard";
 import { InsightItem } from "@/components/InsightItem";
 import { LeadsTable } from "@/components/LeadsTable";
 import { SalesTable } from "@/components/SalesTable";
@@ -268,6 +269,52 @@ export default async function CockpitPage({
     // tabela VisitEvent nao existe ainda (pre-migration)
   }
 
+  // ────────────────────────────────────────────────────────────────
+  // Análise estratégica diária — últimos 7 insights gerados pelo agente
+  // ────────────────────────────────────────────────────────────────
+  type DailyInsightRow = {
+    id: string;
+    analysisDate: Date;
+    generatedAt: Date;
+    headline: string;
+    summary: string;
+    severity: string;
+    recommendations: Array<{ priority: number; action: string; expected_impact: string }>;
+    model: string;
+  };
+  let dailyInsights: DailyInsightRow[] = [];
+  try {
+    const rows = await prisma.dailyInsight.findMany({
+      where: { productSlug: slug },
+      orderBy: { analysisDate: "desc" },
+      take: 7,
+      select: {
+        id: true,
+        analysisDate: true,
+        generatedAt: true,
+        headline: true,
+        summary: true,
+        severity: true,
+        recommendations: true,
+        model: true,
+      },
+    });
+    dailyInsights = rows.map((r) => ({
+      id: r.id,
+      analysisDate: r.analysisDate,
+      generatedAt: r.generatedAt,
+      headline: r.headline,
+      summary: r.summary,
+      severity: r.severity,
+      recommendations: Array.isArray(r.recommendations)
+        ? (r.recommendations as Array<{ priority: number; action: string; expected_impact: string }>)
+        : [],
+      model: r.model,
+    }));
+  } catch {
+    // tabela DailyInsight nao existe ainda
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Topbar />
@@ -418,12 +465,78 @@ export default async function CockpitPage({
 
         {/* ───────────────────────────────────────────────
             SEÇÃO 4 — INSIGHTS
+            Análise estratégica diária (agente LLM) + anomalias
            ─────────────────────────────────────────────── */}
         <Section eyebrow="Insights" title="Anomalias e oportunidades detectadas">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {MOCK_INSIGHTS.map((i) => (
-              <InsightItem key={i.id} {...i} />
-            ))}
+          {/* Sub-seção: Análise estratégica diária */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--fg1)",
+                  textTransform: "uppercase",
+                  letterSpacing: "var(--ls-eyebrow)",
+                }}
+              >
+                Análise estratégica diária
+              </h3>
+              <span style={{ fontSize: 11, color: "var(--fg2)" }}>
+                {dailyInsights.length === 0
+                  ? "aguardando primeiro run do agente (05:00 SP)"
+                  : `${dailyInsights.length} análise${dailyInsights.length === 1 ? "" : "s"} recente${dailyInsights.length === 1 ? "" : "s"}`}
+              </span>
+            </div>
+            {dailyInsights.length === 0 ? (
+              <div
+                className="rounded-xl px-5 py-6 text-center"
+                style={{
+                  background: "var(--cockpit-card)",
+                  border: "1px dashed var(--cockpit-border)",
+                  color: "var(--fg2)",
+                  fontSize: 13,
+                }}
+              >
+                O agente analisa diariamente a campanha às 05:00 SP. Primeira análise vai aparecer
+                aqui após o primeiro run do cron.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {dailyInsights.map((i) => (
+                  <DailyInsightCard
+                    key={i.id}
+                    analysisDate={i.analysisDate}
+                    generatedAt={i.generatedAt}
+                    headline={i.headline}
+                    summary={i.summary}
+                    severity={i.severity}
+                    recommendations={i.recommendations}
+                    model={i.model}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Sub-seção: Anomalias mock (legado, vai sair quando o agente cobrir tudo) */}
+          <div className="flex flex-col gap-3 mt-6">
+            <h3
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--fg1)",
+                textTransform: "uppercase",
+                letterSpacing: "var(--ls-eyebrow)",
+              }}
+            >
+              Anomalias detectadas (auto)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {MOCK_INSIGHTS.map((i) => (
+                <InsightItem key={i.id} {...i} />
+              ))}
+            </div>
           </div>
         </Section>
       </main>

@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
     // com config esperada sem expor segredos.
     env: {
       has_iris_webhook_secret: Boolean(process.env.IRIS_WEBHOOK_SECRET),
+      has_cron_secret: Boolean(process.env.CRON_SECRET),
+      has_anthropic_api_key: Boolean(process.env.ANTHROPIC_API_KEY),
       has_engaged_webhook_token: Boolean(process.env.ENGAGED_WEBHOOK_TOKEN),
       has_meta_access_token: Boolean(process.env.META_ACCESS_TOKEN),
       has_google_ads_refresh_token: Boolean(process.env.GOOGLE_ADS_REFRESH_TOKEN),
