@@ -56,8 +56,19 @@ export async function GET(req: NextRequest) {
     // Echo das envs criticas mascaradas — confirma que o container subiu
     // com config esperada sem expor segredos.
     env: {
+      // Secrets pra automacao (cURL, scripts, cron)
       has_iris_webhook_secret: Boolean(process.env.IRIS_WEBHOOK_SECRET),
       has_cron_secret: Boolean(process.env.CRON_SECRET),
+      // Auth de usuario (Google OAuth + NextAuth)
+      has_nextauth_secret: Boolean(process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET),
+      has_google_client_id: Boolean(process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID),
+      has_google_client_secret: Boolean(
+        process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET
+      ),
+      has_allowed_email_domains: Boolean(process.env.ALLOWED_EMAIL_DOMAINS),
+      // ⚠️ Bypass total de auth — DEVE estar false em producao
+      iris_public_preview_BYPASS_AUTH: process.env.IRIS_PUBLIC_PREVIEW === "true",
+      // Integracoes externas
       has_anthropic_api_key: Boolean(process.env.ANTHROPIC_API_KEY),
       has_engaged_webhook_token: Boolean(process.env.ENGAGED_WEBHOOK_TOKEN),
       has_meta_access_token: Boolean(process.env.META_ACCESS_TOKEN),
