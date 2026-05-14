@@ -288,6 +288,35 @@ model WebhookLog {
 }
 
 // ============================================================
+// ENGAGED PURCHASE — rastreia todos os estados de compra Engaged
+// ============================================================
+// Antes o webhook so processava purchase.paid (criava Sale). Eventos
+// intermediarios (lead_captured, waiting_payment, refused, expired,
+// canceled) eram ignorados. Agora cada externalId de compra Engaged
+// tem 1 linha aqui, com status atual. Sales (PAID) sao criadas em
+// paralelo. Quando vira PAID, continua aqui mas a UI filtra pra
+// mostrar so nao-PAID em "Leads Engaged".
+model EngagedPurchase {
+  id              String   @id @default(cuid())
+  productSlug     String
+  externalId      String   // _id da purchase no Engaged
+  status          String   // DRAFT|WAITING_PAYMENT|CANCELED|REFUSED|EXPIRED|PAID
+  lastEventType   String   // ultimo eventType recebido
+  customerName    String?
+  customerEmail   String?
+  customerPhone   String?
+  amount          Decimal? @db.Decimal(15, 2)
+  currency        String?
+  firstSeenAt     DateTime @default(now())
+  lastUpdatedAt   DateTime @updatedAt
+  saleId          String?  // FK soft pra Sale quando virou PAID
+
+  @@unique([productSlug, externalId])
+  @@index([productSlug, status])
+  @@index([lastUpdatedAt])
+}
+
+// ============================================================
 // DAILY INSIGHT — análise estratégica diária gerada pela LLM
 // ============================================================
 // Agente roda 1x por dia (05:00 SP) por (produto, campanha), analisa

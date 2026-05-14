@@ -34,6 +34,30 @@ const PAID_STATUS = new Set([
   "pago", "aprovado", "concluido", "sucesso",
 ]);
 
+/**
+ * Mapeia o `eventType` do Engaged pro status interno do EngagedPurchase.
+ * Tabela canonica do Engaged:
+ *   purchase.lead_captured                     → DRAFT
+ *   purchase.open.payment.waiting_payment      → WAITING_PAYMENT
+ *   purchase.open.payment.canceled             → CANCELED
+ *   purchase.refused                           → REFUSED
+ *   purchase.expired                           → EXPIRED
+ *   purchase.paid                              → PAID
+ * Outros eventos (purchase.refund, purchase.chargeback, etc) retornam null
+ * → handler ignora pra nao poluir tabela com estados nao mapeados.
+ */
+function mapEventTypeToStatus(eventType: string | undefined | null): string | null {
+  if (!eventType) return null;
+  const et = eventType.toLowerCase().trim();
+  if (et === "purchase.lead_captured") return "DRAFT";
+  if (et === "purchase.open.payment.waiting_payment") return "WAITING_PAYMENT";
+  if (et === "purchase.open.payment.canceled") return "CANCELED";
+  if (et === "purchase.refused") return "REFUSED";
+  if (et === "purchase.expired") return "EXPIRED";
+  if (et === "purchase.paid") return "PAID";
+  return null;
+}
+
 const EngagedWebhook = z
   .object({
     // Identificação do evento (Engaged provavelmente envia event_type ou similar)
@@ -479,83 +503,168 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   }
   const productSlug = matchedProduct.slug;
 
-  if (status && !PAID_STATUS.has(status)) {
+  // Mapeia eventType → status interno. Eventos nao mapeados sao ignorados.
+  const eventType = p.eventType ?? null;
+  const purchaseStatus = mapEventTypeToStatus(eventType);
+  if (!purchaseStatus) {
     return {
       statusCode: 200,
-      body: { status: "ignored", reason: `status_not_paid (${status})`, externalId },
+      body: { status: "ignored", reason: `unmapped_event_type (${eventType})`, externalId },
       outcome: "ignored",
-      reason: `status_not_paid:${status}`,
+      reason: `unmapped_event_type:${eventType ?? "null"}`,
       externalId: externalId || undefined,
     };
   }
 
-  const data = {
+  // Dados do cliente/compra extraidos do payload (mesma logica do parser)
+  const customerName = pickName(p);
+  const customerEmail = pickEmail(p);
+  const customerPhone = pickPhone(p);
+  const amount = pickAmount(p);
+  const currency = (p.currency || "BRL").toUpperCase();
+  const saleDate = pickSaleDate(p);
+
+  // externalId eh chave de unicidade — sem ela nao da pra upsert idempotente
+  if (!externalId) {
+    return {
+      statusCode: 422,
+      body: { error: "missing_external_id", eventType },
+      outcome: "validation_failed",
+      reason: "missing_external_id",
+    };
+  }
+
+  // ─── STEP 1: SEMPRE upsert EngagedPurchase ────────────────────────────
+  // Independente do status, registra o estado atual da compra.
+  let engagedPurchase;
+  try {
+    engagedPurchase = await prisma.engagedPurchase.upsert({
+      where: {
+        productSlug_externalId: { productSlug, externalId },
+      },
+      create: {
+        productSlug,
+        externalId,
+        status: purchaseStatus,
+        lastEventType: eventType ?? "",
+        customerName,
+        customerEmail,
+        customerPhone,
+        amount: amount > 0 ? amount : null,
+        currency: amount > 0 ? currency : null,
+      },
+      update: {
+        status: purchaseStatus,
+        lastEventType: eventType ?? "",
+        // So atualiza dados do cliente se o novo payload trouxe (evita
+        // sobrescrever name/email/phone com null vindo de evento parcial)
+        ...(customerName ? { customerName } : {}),
+        ...(customerEmail ? { customerEmail } : {}),
+        ...(customerPhone ? { customerPhone } : {}),
+        ...(amount > 0 ? { amount, currency } : {}),
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      statusCode: 500,
+      body: { error: "db_error", phase: "engaged_purchase_upsert", message: msg },
+      outcome: "error",
+      reason: msg.slice(0, 200),
+      externalId,
+    };
+  }
+
+  // ─── STEP 2: Se PAID, criar/atualizar Sale tambem ─────────────────────
+  if (purchaseStatus !== "PAID") {
+    return {
+      statusCode: 200,
+      body: {
+        status: "tracked",
+        externalId,
+        engagedPurchaseId: engagedPurchase.id,
+        purchaseStatus,
+      },
+      outcome: "tracked",
+      reason: `engaged_purchase:${purchaseStatus}`,
+      externalId,
+    };
+  }
+
+  if (amount <= 0) {
+    return {
+      statusCode: 422,
+      body: { error: "invalid_amount_for_paid", amount, externalId },
+      outcome: "validation_failed",
+      reason: "invalid_amount_for_paid",
+      externalId,
+    };
+  }
+
+  const saleData = {
     productSlug,
     source: "ENGAGED" as const,
-    customerName: pickName(p),
-    customerEmail: pickEmail(p),
-    customerPhone: pickPhone(p),
-    amount: pickAmount(p),
-    currency: (p.currency || "BRL").toUpperCase(),
+    customerName,
+    customerEmail,
+    customerPhone,
+    amount,
+    currency,
     externalId,
     externalRef: p.payment_id || null,
     notes: pickNotes(p),
-    saleDate: pickSaleDate(p),
+    saleDate,
   };
-
-  if (data.amount <= 0) {
-    return {
-      statusCode: 422,
-      body: { error: "invalid_amount", amount: data.amount, externalId },
-      outcome: "validation_failed",
-      reason: "invalid_amount",
-      externalId: externalId || undefined,
-    };
-  }
 
   try {
     let sale;
-    if (externalId) {
-      const existing = await prisma.sale.findFirst({
-        where: { source: "ENGAGED", externalId },
+    const existing = await prisma.sale.findFirst({
+      where: { source: "ENGAGED", externalId },
+    });
+    if (existing) {
+      sale = await prisma.sale.update({
+        where: { id: existing.id },
+        data: {
+          customerName,
+          customerEmail,
+          customerPhone,
+          amount,
+          currency,
+          notes: saleData.notes,
+          saleDate,
+        },
       });
-      if (existing) {
-        sale = await prisma.sale.update({
-          where: { id: existing.id },
-          data: {
-            customerName: data.customerName,
-            customerEmail: data.customerEmail,
-            customerPhone: data.customerPhone,
-            amount: data.amount,
-            currency: data.currency,
-            notes: data.notes,
-            saleDate: data.saleDate,
-          },
-        });
-        return {
-          statusCode: 200,
-          body: { status: "updated", id: sale.id, externalId },
-          outcome: "updated",
-          saleId: sale.id,
-          externalId: externalId || undefined,
-        };
-      }
+    } else {
+      sale = await prisma.sale.create({ data: saleData });
     }
-    sale = await prisma.sale.create({ data });
+
+    // Linka EngagedPurchase → Sale (rastreio E2E)
+    await prisma.engagedPurchase
+      .update({
+        where: { id: engagedPurchase.id },
+        data: { saleId: sale.id },
+      })
+      .catch(() => {});
+
     return {
-      statusCode: 201,
-      body: { status: "created", id: sale.id, externalId },
-      outcome: "created",
+      statusCode: existing ? 200 : 201,
+      body: {
+        status: existing ? "updated" : "created",
+        id: sale.id,
+        externalId,
+        engagedPurchaseId: engagedPurchase.id,
+      },
+      outcome: existing ? "updated" : "created",
       saleId: sale.id,
-      externalId: externalId || undefined,
+      externalId,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
       statusCode: 500,
-      body: { error: "db_error", message: msg },
+      body: { error: "db_error", phase: "sale_upsert", message: msg },
       outcome: "error",
       reason: msg.slice(0, 200),
+      externalId,
     };
   }
 }

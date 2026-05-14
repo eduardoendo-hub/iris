@@ -9,6 +9,7 @@ import { CaptacaoSourceTable } from "@/components/CaptacaoSourceTable";
 import { DailyInsightCard } from "@/components/DailyInsightCard";
 import { MetasCard, type Meta } from "@/components/MetasCard";
 import { LeadsTable } from "@/components/LeadsTable";
+import { EngagedLeadsTable } from "@/components/EngagedLeadsTable";
 import { SalesTable } from "@/components/SalesTable";
 import { SaleFormButton } from "@/components/SaleFormButton";
 import {
@@ -149,6 +150,45 @@ export default async function CockpitPage({
     });
   } catch {
     // DB nao disponivel — segue com lista vazia
+  }
+
+  // Leads do Engaged — todos os status != PAID (pra mostrar funil pre-venda)
+  let engagedLeadsCount = 0;
+  let engagedLeads: Array<{
+    id: string;
+    externalId: string;
+    status: string;
+    lastEventType: string;
+    customerName: string | null;
+    customerEmail: string | null;
+    customerPhone: string | null;
+    amount: number | null;
+    currency: string | null;
+    firstSeenAt: Date;
+    lastUpdatedAt: Date;
+  }> = [];
+  try {
+    const raw = await prisma.engagedPurchase.findMany({
+      where: { productSlug: slug, status: { not: "PAID" } },
+      orderBy: { lastUpdatedAt: "desc" },
+      take: 50,
+    });
+    engagedLeadsCount = raw.length;
+    engagedLeads = raw.map((r) => ({
+      id: r.id,
+      externalId: r.externalId,
+      status: r.status,
+      lastEventType: r.lastEventType,
+      customerName: r.customerName,
+      customerEmail: r.customerEmail,
+      customerPhone: r.customerPhone,
+      amount: r.amount ? Number(r.amount) : null,
+      currency: r.currency,
+      firstSeenAt: r.firstSeenAt,
+      lastUpdatedAt: r.lastUpdatedAt,
+    }));
+  } catch {
+    // tabela EngagedPurchase nao existe ainda (pre-migration)
   }
 
   // Vendas — total + breakdown por origem (Diretas/Consultor/Engaged) + detalhes
@@ -600,7 +640,7 @@ export default async function CockpitPage({
           title="Leads, canais e posição do CTA"
         >
           <CaptacaoSourceTable rows={captacaoRows} days={captacaoDays} />
-          <LeadsTable leads={leadsRecent} totalCount={leadsCount} />
+          <EngagedLeadsTable rows={engagedLeads} totalCount={engagedLeadsCount} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <ChannelTable rows={[...channels]} />
             <CTAPositionTable rows={[...ctaPositions]} />
