@@ -7,6 +7,7 @@ import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
 import { CaptacaoSourceTable } from "@/components/CaptacaoSourceTable";
 import { DailyInsightCard } from "@/components/DailyInsightCard";
+import { MetasCard, type Meta } from "@/components/MetasCard";
 import { LeadsTable } from "@/components/LeadsTable";
 import { SalesTable } from "@/components/SalesTable";
 import { SaleFormButton } from "@/components/SaleFormButton";
@@ -313,6 +314,105 @@ export default async function CockpitPage({
     // tabela DailyInsight nao existe ainda
   }
 
+  // ────────────────────────────────────────────────────────────────
+  // Metas da campanha — todos os indicadores vs alvos do plano de MKT
+  // ────────────────────────────────────────────────────────────────
+  // Targets vem do knowledge base lib/agent/knowledge/campaign-plan.md:
+  //   - 30 matriculas, R$ 44.970 receita, R$ 9.000 budget total
+  //   - CAC max R$ 300, ROAS alvo 5x, CPL alvo R$ 32-36
+  const CAMPAIGN_GOALS = {
+    matriculas: 30,
+    receita: 44970,
+    midiaTotal: 9000, // limite — quer gastar menos
+    cacMax: 300,
+    roasAlvo: 5.0,
+    cplAlvo: 36, // pega o teto da faixa 32-36
+    convLeadMatricula: 11, // % alvo (faixa 11-12%)
+  };
+  const CAMPAIGN_START_ISO = "2026-05-11";
+  const CAMPAIGN_END_ISO = "2026-06-07"; // ultimo dia de matricula
+
+  // Spend ACUMULADO total da campanha (desde dia 1)
+  let spendCampaignTotal = 0;
+  try {
+    const campaignStartUTC = new Date(CAMPAIGN_START_ISO + "T03:00:00.000Z");
+    const totalAgg = await prisma.metricSample.aggregate({
+      where: {
+        productSlug: slug,
+        bucket: "DAY",
+        metric: "spend",
+        startsAt: { gte: campaignStartUTC },
+        source: { in: ["META_ADS", "GOOGLE_ADS"] },
+      },
+      _sum: { value: true },
+    });
+    spendCampaignTotal = Number(totalAgg._sum.value ?? 0);
+  } catch {
+    // tabela MetricSample nao existe ainda
+  }
+
+  // CAC e ROAS calculados do estado atual
+  const cacAtual = salesCount > 0 ? spendCampaignTotal / salesCount : 0;
+  const roasAtual = spendCampaignTotal > 0 ? salesTotal / spendCampaignTotal : 0;
+  // CPL alvo é por LEAD captado. Sem dado de leads isolado ainda (vem do
+  // form/RD CRM). Por enquanto usa click_compra como proxy de "lead caro"
+  // ou pula essa meta — vou incluir como proxy mesmo (mais util pra mostrar
+  // visualmente do que esconder).
+  const cplAtual = clicksCompra > 0 ? mediaInvestment / clicksCompra : 0;
+
+  // Dias da campanha
+  const nowSP = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const startSP = new Date(CAMPAIGN_START_ISO + "T03:00:00.000Z");
+  const endSP = new Date(CAMPAIGN_END_ISO + "T03:00:00.000Z");
+  const campaignDay = Math.floor((nowSP.getTime() - startSP.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  const daysToEnd = Math.floor((endSP.getTime() - nowSP.getTime()) / (24 * 60 * 60 * 1000));
+
+  const metas: Meta[] = [
+    {
+      label: "Matrículas",
+      atual: salesCount,
+      alvo: CAMPAIGN_GOALS.matriculas,
+      format: "number",
+      direction: "min",
+    },
+    {
+      label: "Receita",
+      atual: salesTotal,
+      alvo: CAMPAIGN_GOALS.receita,
+      format: "currency",
+      direction: "min",
+    },
+    {
+      label: "Mídia gasta",
+      atual: spendCampaignTotal,
+      alvo: CAMPAIGN_GOALS.midiaTotal,
+      format: "currency",
+      direction: "max",
+      hint: "limite",
+    },
+    {
+      label: "CAC",
+      atual: cacAtual,
+      alvo: CAMPAIGN_GOALS.cacMax,
+      format: "currency",
+      direction: "max",
+    },
+    {
+      label: "ROAS",
+      atual: roasAtual,
+      alvo: CAMPAIGN_GOALS.roasAlvo,
+      format: "multiplier",
+      direction: "min",
+    },
+    {
+      label: "CPL (click compra)",
+      atual: cplAtual,
+      alvo: CAMPAIGN_GOALS.cplAlvo,
+      format: "currency",
+      direction: "max",
+    },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col">
       <Topbar />
@@ -338,7 +438,7 @@ export default async function CockpitPage({
 
       <TabNav active="cockpit" productSlug={slug} />
 
-      <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col gap-8">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-5 flex flex-col gap-5">
         {metricsSourceLabel === "mock" && <MockBanner />}
 
         {/* ───────────────────────────────────────────────
@@ -350,7 +450,7 @@ export default async function CockpitPage({
           eyebrow="Captação"
           title="Resultados de prospecção e tráfego"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             <KPICard
               label="Visitas LP"
               value={visitsLP}
@@ -396,6 +496,17 @@ export default async function CockpitPage({
         </Section>
 
         {/* ───────────────────────────────────────────────
+            SEÇÃO 1.5 — METAS DA CAMPANHA (card compacto)
+            Todos os KPIs vs alvos do plano de marketing em 1 card
+           ─────────────────────────────────────────────── */}
+        <MetasCard
+          metas={metas}
+          campaignDay={campaignDay}
+          daysToEnd={daysToEnd}
+          budgetTotal={CAMPAIGN_GOALS.midiaTotal}
+        />
+
+        {/* ───────────────────────────────────────────────
             SEÇÃO 2 — VENDAS
             2 cards grandes (Vendas Totais com split + Receita)
             + tabela de detalhamento abaixo
@@ -405,7 +516,7 @@ export default async function CockpitPage({
           title="Resultado comercial"
           actions={<SaleFormButton productSlug={slug} />}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <KPICard
               label="Vendas totais"
               value={salesCount}
@@ -455,7 +566,7 @@ export default async function CockpitPage({
         >
           <CaptacaoSourceTable rows={captacaoRows} days={captacaoDays} />
           <LeadsTable leads={leadsRecent} totalCount={leadsCount} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <ChannelTable rows={[...channels]} />
             <CTAPositionTable rows={[...ctaPositions]} />
           </div>
@@ -568,16 +679,16 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-3">
       <div
-        className="flex items-end justify-between flex-wrap gap-2 pb-3"
+        className="flex items-center justify-between flex-wrap gap-2 pb-2"
         style={{
           borderBottom: "1px solid var(--cockpit-border-strong)",
         }}
       >
         <div
-          className="flex flex-col gap-1 relative"
-          style={{ paddingLeft: 14 }}
+          className="flex items-baseline gap-3 relative"
+          style={{ paddingLeft: 12 }}
         >
           {/* Marcador vertical Tiffany à esquerda do título da seção */}
           <span
@@ -585,16 +696,16 @@ function Section({
             style={{
               position: "absolute",
               left: 0,
-              top: 2,
-              bottom: 2,
-              width: 4,
+              top: 1,
+              bottom: 1,
+              width: 3,
               borderRadius: 2,
               background: "var(--brand)",
             }}
           />
           <span
             style={{
-              fontSize: 11,
+              fontSize: 10,
               textTransform: "uppercase",
               letterSpacing: "var(--ls-eyebrow)",
               color: "var(--brand)",
@@ -604,7 +715,7 @@ function Section({
             {eyebrow}
           </span>
           {title && (
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--fg1)" }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--fg1)" }}>
               {title}
             </h2>
           )}

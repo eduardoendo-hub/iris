@@ -43,7 +43,7 @@ export function KPICard({
 
   return (
     <div
-      className="rounded-xl p-5 flex flex-col gap-2"
+      className="rounded-xl p-4 flex flex-col gap-1.5"
       style={{
         background: emphasis === "strong" ? "var(--cockpit-card-strong)" : "var(--cockpit-card)",
         border: "1px solid var(--cockpit-border)",
@@ -68,14 +68,14 @@ export function KPICard({
         )}
         <span>{label}</span>
       </div>
-      <div className="flex items-baseline gap-3">
+      <div className="flex items-baseline gap-2">
         <span
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: emphasis === "strong" ? 36 : 30,
+            fontSize: emphasis === "strong" ? 30 : 24,
             fontWeight: 700,
             color: "var(--fg1)",
-            lineHeight: 1,
+            lineHeight: 1.05,
           }}
         >
           {formatted}
