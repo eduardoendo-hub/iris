@@ -86,7 +86,8 @@ export async function debugMetaInsights(opts: {
   const fields = ["spend", "impressions", "clicks", "reach", "cpc", "cpm", "ctr"].join(",");
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/insights`);
   url.searchParams.set("fields", fields);
-  url.searchParams.set("date_preset", pickDatePreset(days));
+  const { since, until } = spTimeRange(days);
+  url.searchParams.set("time_range", JSON.stringify({ since, until }));
   url.searchParams.set("time_increment", "1");
   let level: string;
   let filterStr: string | null = null;
@@ -149,12 +150,26 @@ export async function listMetaCampaigns(productSlug: string): Promise<
   return json.data ?? [];
 }
 
-function pickDatePreset(days: number): string {
-  // Meta API tem presets fixos — escolhemos o mais proximo
-  if (days <= 7) return "last_7d";
-  if (days <= 14) return "last_14d";
-  if (days <= 28) return "last_28d";
-  return "last_30d";
+/**
+ * Calcula time_range em SP (=UTC-3). Retorna {since, until} no formato
+ * YYYY-MM-DD que o Meta espera. Inclusivo nos dois extremos.
+ *
+ * Por que nao usar date_preset=last_7d? Em testes, a Meta API as vezes
+ * NAO inclui o dia atual no preset (depende de quando o spend foi
+ * consolidado e da timezone da conta). time_range explicito com
+ * until=hoje SP forca a inclusao.
+ */
+function spTimeRange(days: number): { since: string; until: string } {
+  const spDate = (offsetDays: number): string => {
+    const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  };
+  return { since: spDate(days - 1), until: spDate(0) };
 }
 
 async function fetchInsights(days: number, productSlug: string): Promise<DailyInsight[]> {
@@ -162,7 +177,9 @@ async function fetchInsights(days: number, productSlug: string): Promise<DailyIn
   const fields = ["spend", "impressions", "clicks", "reach", "cpc", "cpm", "ctr"].join(",");
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/insights`);
   url.searchParams.set("fields", fields);
-  url.searchParams.set("date_preset", pickDatePreset(days));
+  // time_range explicito em SP — mais confiavel que date_preset pra incluir hoje
+  const { since, until } = spTimeRange(days);
+  url.searchParams.set("time_range", JSON.stringify({ since, until }));
   url.searchParams.set("time_increment", "1"); // 1 = breakdown por dia
 
   // Filter strategy (em ordem de preferencia):
