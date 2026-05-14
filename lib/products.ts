@@ -68,13 +68,8 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     slug: "claude-pro",
     name: "Curso Claude Pro",
     lpUrl: "https://claude.impacta.com.br",
-    // Convencao oficial: campanha tem "CLAUDEPRO" no nome. Mantemos por
-    // documentacao mesmo que metaAdNameFilter tenha precedencia.
+    // Campanha real no Meta: "M1-PROSP-CLAUDEPRO-MAI26" → bate com CONTAIN "CLAUDEPRO"
     metaCampaignFilter: "CLAUDEPRO",
-    // Realidade do que o user criou no Meta: ads sao "M1-REEL-PARE-PERGUNTAR-V1",
-    // "M1-REEL-SO-CURSO-ROBO-V1". Campanha real provavelmente nao tem
-    // CLAUDEPRO no nome, entao filtramos a nivel de AD com prefixo M1-REEL.
-    metaAdNameFilter: "M1-REEL-",
     googleCampaignFilter: "CLAUDEPRO",
     campaignSlug: "claude-pro-maio-2026",
     engagedCheckoutSharedIds: ["x68jpj7w3k"],
