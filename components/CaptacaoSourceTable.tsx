@@ -57,10 +57,6 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
     { visits: 0, clickCompra: 0, clickConsultor: 0, clickWhats: 0 }
   );
 
-  const macroLeaks = rows.filter((r) =>
-    [r.utmContent, r.utmCampaign].some((v) => v && /^\{\{.+\}\}$/.test(v))
-  ).length;
-
   function toggle(key: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -86,20 +82,6 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
           {fmtNum(totals.visits)} visitas · {fmtNum(totals.clickCompra)} cliques compra
         </span>
       </div>
-      {macroLeaks > 0 && (
-        <div
-          className="px-5 py-2"
-          style={{
-            background: "rgba(247,201,72,0.08)",
-            borderBottom: "1px solid var(--cockpit-border)",
-            color: "var(--tn-gold)",
-            fontSize: 11,
-          }}
-        >
-          ⚠️ {macroLeaks} {macroLeaks === 1 ? "linha contém" : "linhas contêm"} macro não substituída
-          ({"{{...}}"}) — confirme tracking template no Meta/Google Ads.
-        </div>
-      )}
       <div className="overflow-x-auto">
         <table className="w-full" style={{ borderCollapse: "collapse" }}>
           <thead>
@@ -223,19 +205,13 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
                 // Sub-rows por anuncio
                 const subRows = g.ads.map((ad, i) => {
                   const adConv = ad.visits > 0 ? (ad.clickCompra / ad.visits) * 100 : 0;
-                  const isMacroLeak = !!(
-                    (ad.utmContent && /^\{\{.+\}\}$/.test(ad.utmContent)) ||
-                    (ad.utmCampaign && /^\{\{.+\}\}$/.test(ad.utmCampaign))
-                  );
                   return (
                     <tr
                       key={`g-${rowKey}-ad-${i}`}
                       style={{
                         borderTop: "1px dashed var(--cockpit-border)",
                         fontSize: 12,
-                        background: isMacroLeak
-                          ? "rgba(247,201,72,0.06)"
-                          : "rgba(10,186,181,0.02)",
+                        background: "rgba(10,186,181,0.02)",
                       }}
                     >
                       <td className="px-5 py-2"></td>
@@ -245,7 +221,7 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
                       <td
                         className="px-5 py-2"
                         style={{
-                          color: isMacroLeak ? "var(--tn-gold)" : "var(--fg1)",
+                          color: "var(--fg1)",
                           fontFamily: "var(--font-mono)",
                           fontSize: 11,
                           maxWidth: 320,
