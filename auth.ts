@@ -10,10 +10,19 @@ const ALLOWED_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS ?? "")
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  // Atras de reverse proxy (Coolify/Traefik) — confiar nos headers
+  // X-Forwarded-Host/Proto. Sem isso, callback OAuth retorna 400 generico
+  // "Server error - There is a problem with the server configuration."
+  trustHost: true,
+  // Debug logs em dev/preview. Em prod fica desligado pra nao vazar info.
+  debug: process.env.NODE_ENV !== "production",
+  // Secret explicito — NextAuth v5 procura AUTH_SECRET por default mas
+  // suportamos NEXTAUTH_SECRET pra compat com setup atual.
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET,
     }),
   ],
   session: { strategy: "database" },
