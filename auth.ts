@@ -8,6 +8,14 @@ const ALLOWED_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS ?? "")
   .map((d) => d.trim().toLowerCase())
   .filter(Boolean);
 
+// Whitelist de emails individuais (alem dos dominios). Util pra admin com
+// conta pessoal Gmail/Outlook sem abrir o dominio inteiro pra qualquer um.
+// Formato: "user1@gmail.com,user2@outlook.com" (separados por virgula).
+const ALLOWED_EMAILS = (process.env.ALLOWED_EMAIL_ADDRESSES ?? "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   // Atras de reverse proxy (Coolify/Traefik) — confiar nos headers
@@ -30,8 +38,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async signIn({ user }) {
       if (!user.email) return false;
-      if (ALLOWED_DOMAINS.length === 0) return true;
-      const domain = user.email.split("@")[1]?.toLowerCase();
+      const email = user.email.toLowerCase();
+      // Se nenhum filtro setado → permite qualquer um (modo dev/aberto).
+      if (ALLOWED_DOMAINS.length === 0 && ALLOWED_EMAILS.length === 0) return true;
+      // Permite se email exato estiver na whitelist
+      if (ALLOWED_EMAILS.includes(email)) return true;
+      // Ou se o dominio do email estiver na whitelist
+      const domain = email.split("@")[1];
       return Boolean(domain && ALLOWED_DOMAINS.includes(domain));
     },
     async session({ session, user }) {

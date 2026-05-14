@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
         process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET
       ),
       has_allowed_email_domains: Boolean(process.env.ALLOWED_EMAIL_DOMAINS),
+      has_allowed_email_addresses: Boolean(process.env.ALLOWED_EMAIL_ADDRESSES),
       // ⚠️ Bypass total de auth — DEVE estar false em producao
       iris_public_preview_BYPASS_AUTH: process.env.IRIS_PUBLIC_PREVIEW === "true",
       // Integracoes externas
