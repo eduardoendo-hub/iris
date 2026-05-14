@@ -72,3 +72,28 @@ Outros caminhos:
 - **WhatsApp**: float bubble + sticky bar → conversão por SDR (vira `source=CONSULTOR` na Sale).
 - **Form "Falar com especialista"**: lead vai pro RD CRM, SDR liga, vira matrícula `source=CONSULTOR`.
 - **Direta**: matrícula tirada por algum canal não rastreável (raro, lançada manual via cockpit).
+
+## ⚠️ DEFINIÇÕES CRÍTICAS — não confunda
+
+Existe uma diferença ENORME entre eventos de **intenção** e **matrícula real**. NUNCA conte intenção como venda.
+
+| Métrica | O que é | Origem técnica | Significado |
+|---|---|---|---|
+| **`captacao.visitas`** | quantos page views da LP | VisitEvent (`lp_view`) | sessão na LP, NÃO comprou |
+| **`captacao.clickCompra`** | quantos cliques no botão "Garantir vaga" | VisitEvent (`click_compra`) | **INTENÇÃO de compra**, NÃO matrícula. O usuário foi pro checkout, pode ter desistido lá. Tipicamente 5–20% dos clicks viram compra de fato. |
+| **`captacao.clickConsultor`** | cliques em "Falar com especialista" | VisitEvent (`click_consultor`) | INTENÇÃO de falar com SDR, NÃO matrícula |
+| **`captacao.clickWhats`** | cliques pra abrir WhatsApp | VisitEvent (`click_whats`) | INTENÇÃO de conversar, NÃO matrícula |
+| **`captacao.leadForm`** | submits do form "Falar com especialista" | VisitEvent (`lead_form`) | Lead capturado (vira deal no RD CRM), NÃO matrícula |
+| **`vendas.novasDia`** | **MATRÍCULAS pagas** confirmadas no dia | Sale (de webhook Engaged confirmado OU manual via cockpit) | **A ÚNICA MÉTRICA QUE CONTA COMO VENDA REAL** |
+| **`vendas.acumuladoMatriculas`** | total de matrículas pagas da campanha | Sale (todas, agregado) | **Único número que conta pra meta de 30 matrículas** |
+| **`vendas.receitaDia` / `acumuladoReceita`** | R$ efetivo de matrículas | Sale (sum amount) | dinheiro recebido |
+
+**Regras de raciocínio:**
+- "Conversão" no contexto do funil pode significar coisas diferentes — sempre especifique qual:
+  - **Conv visita→intent**: `clickCompra / visitas` (mede se a LP gera interesse)
+  - **Conv visita→matrícula**: `novasDia / visitas` (mede taxa final de compra)
+  - **Conv intent→matrícula**: `novasDia / clickCompra` (mede se o checkout retém)
+- Para **CAC e ROAS**: usa SEMPRE `vendas.novasDia` e `vendas.receitaDia`, NUNCA `clickCompra`.
+- Para **progresso da meta**: usa `vendas.acumuladoMatriculas` / 30.
+- Quando o agente vê 18 clickCompra e 2 novasDia: NÃO diga "18 matrículas" nem "ROAS de X com 18 vendas". Diga "18 intent-clicks geraram 2 matrículas no dia (conv intent→matrícula 11%)".
+- Se houver click_compra alto e novasDia baixo, o problema está no **checkout** (página Engaged) ou na LP convertendo curiosos demais — não no tráfego.
