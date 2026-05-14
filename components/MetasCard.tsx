@@ -26,6 +26,9 @@ export type Meta = {
   direction: Direction;
   /** Texto extra opcional ao lado da meta (ex: "≤ R$ 300") */
   hint?: string;
+  /** Projecao para o fim da campanha baseado no ritmo atual (so dias uteis).
+   *  Quando setado, aparece "X → Y / alvo" com Y em destaque colorido. */
+  forecast?: number;
 };
 
 export function MetasCard({
@@ -33,11 +36,15 @@ export function MetasCard({
   campaignDay,
   daysToEnd,
   budgetTotal,
+  businessDaysElapsed,
+  businessDaysTotal,
 }: {
   metas: Meta[];
   campaignDay: number | null;
   daysToEnd: number | null;
   budgetTotal?: number;
+  businessDaysElapsed?: number;
+  businessDaysTotal?: number;
 }) {
   return (
     <div
@@ -67,6 +74,9 @@ export function MetasCard({
             <span style={{ fontSize: 11, color: "var(--fg2)", fontFamily: "var(--font-mono)" }}>
               dia {campaignDay}
               {daysToEnd !== null && daysToEnd >= 0 ? ` · ${daysToEnd}d restantes` : ""}
+              {businessDaysElapsed !== undefined && businessDaysTotal !== undefined
+                ? ` · ${businessDaysElapsed}/${businessDaysTotal} dias úteis (forecast)`
+                : ""}
             </span>
           )}
         </div>
@@ -85,7 +95,7 @@ export function MetasCard({
   );
 }
 
-function MetaRow({ label, atual, alvo, format, direction, hint }: Meta) {
+function MetaRow({ label, atual, alvo, format, direction, hint, forecast }: Meta) {
   // progress = quao perto/longe estamos
   // Pra direction "min": progress = atual/alvo (>=1 atingiu)
   // Pra direction "max": progress = 1 - atual/alvo (1 = no zero, 0 = no limite)
@@ -140,6 +150,20 @@ function MetaRow({ label, atual, alvo, format, direction, hint }: Meta) {
         }}
       >
         <span style={{ fontWeight: 700 }}>{fmt(atual, format)}</span>
+        {forecast !== undefined && (
+          <>
+            <span style={{ color: "var(--fg2)" }}> → </span>
+            <span
+              style={{
+                fontWeight: 700,
+                color: forecastColor(forecast, alvo, direction),
+              }}
+              title={`projeção pro fim da campanha (ritmo atual, só dias úteis)`}
+            >
+              {fmt(forecast, format)}
+            </span>
+          </>
+        )}
         <span style={{ color: "var(--fg2)" }}> {direction === "min" ? "/" : direction === "max" ? "≤" : "/"} </span>
         <span style={{ color: "var(--fg2)" }}>{fmt(alvo, format)}</span>
         {hint && <span style={{ color: "var(--fg2)", marginLeft: 6 }}>{hint}</span>}
@@ -190,6 +214,21 @@ function MetaRow({ label, atual, alvo, format, direction, hint }: Meta) {
       </span>
     </div>
   );
+}
+
+/** Cor do forecast baseado em se vai bater o alvo */
+function forecastColor(forecast: number, alvo: number, direction: Direction): string {
+  if (alvo <= 0) return "var(--fg2)";
+  const ratio = forecast / alvo;
+  if (direction === "min") {
+    if (ratio >= 1.0) return "#30D158"; // verde — vai bater
+    if (ratio >= 0.7) return "#F7C948"; // amarelo — perto
+    return "#EC6088"; // vermelho — vai errar
+  }
+  // direction "max": forecast deve ficar abaixo do alvo
+  if (ratio <= 1.0) return "#30D158";
+  if (ratio <= 1.3) return "#F7C948";
+  return "#EC6088";
 }
 
 function fmt(n: number, format: Format): string {

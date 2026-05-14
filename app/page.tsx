@@ -367,6 +367,37 @@ export default async function CockpitPage({
   const campaignDay = Math.floor((nowSP.getTime() - startSP.getTime()) / (24 * 60 * 60 * 1000)) + 1;
   const daysToEnd = Math.floor((endSP.getTime() - nowSP.getTime()) / (24 * 60 * 60 * 1000));
 
+  // ─── Forecast (Matriculas, Receita) ────────────────────────────────
+  // Conta APENAS dias uteis (seg-sex) — user nao opera fim de semana.
+  // Velocidade atual = atual / dias_uteis_decorridos
+  // Forecast = velocidade * dias_uteis_total_campanha
+  function countBusinessDays(from: Date, to: Date): number {
+    if (to < from) return 0;
+    let count = 0;
+    const cur = new Date(from);
+    cur.setUTCHours(12, 0, 0, 0);
+    const endMs = to.getTime();
+    while (cur.getTime() <= endMs) {
+      const dow = cur.getUTCDay(); // 0=domingo, 6=sabado
+      if (dow !== 0 && dow !== 6) count++;
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return count;
+  }
+  const businessDaysElapsed = countBusinessDays(startSP, nowSP);
+  const businessDaysTotal = countBusinessDays(startSP, endSP);
+
+  let matriculasForecast: number | undefined;
+  let receitaForecast: number | undefined;
+  if (businessDaysElapsed > 0 && businessDaysTotal > businessDaysElapsed) {
+    matriculasForecast = (salesCount / businessDaysElapsed) * businessDaysTotal;
+    receitaForecast = (salesTotal / businessDaysElapsed) * businessDaysTotal;
+  } else if (businessDaysElapsed > 0) {
+    // Ja passou todos os dias uteis — forecast = atual
+    matriculasForecast = salesCount;
+    receitaForecast = salesTotal;
+  }
+
   const metas: Meta[] = [
     {
       label: "Matrículas",
@@ -374,6 +405,7 @@ export default async function CockpitPage({
       alvo: CAMPAIGN_GOALS.matriculas,
       format: "number",
       direction: "min",
+      forecast: matriculasForecast,
     },
     {
       label: "Receita",
@@ -381,6 +413,7 @@ export default async function CockpitPage({
       alvo: CAMPAIGN_GOALS.receita,
       format: "currency",
       direction: "min",
+      forecast: receitaForecast,
     },
     {
       label: "Mídia gasta",
@@ -504,6 +537,8 @@ export default async function CockpitPage({
           campaignDay={campaignDay}
           daysToEnd={daysToEnd}
           budgetTotal={CAMPAIGN_GOALS.midiaTotal}
+          businessDaysElapsed={businessDaysElapsed}
+          businessDaysTotal={businessDaysTotal}
         />
 
         {/* ───────────────────────────────────────────────
