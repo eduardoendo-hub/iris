@@ -31,6 +31,17 @@ export type ProductConfig = {
    */
   metaCampaignFilter?: string;
 
+  /**
+   * ALTERNATIVA ao metaCampaignFilter: substring case-insensitive no
+   * `ad.name` (nome do anuncio). Use quando a campanha NAO segue a
+   * convencao de naming e nao da pra renomear sem perder historico/cache.
+   * Tem PRECEDENCIA sobre metaCampaignFilter (se setado, usa esse).
+   *
+   * Ex: anuncios `M1-REEL-PARE-PERGUNTAR-V1`, `M1-REEL-SO-CURSO-ROBO-V1`
+   * → metaAdNameFilter: "M1-REEL-" matcha ambos.
+   */
+  metaAdNameFilter?: string;
+
   /** Mesmo padrão pro Google Ads (Fase 4). */
   googleCampaignFilter?: string;
 
@@ -57,7 +68,13 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     slug: "claude-pro",
     name: "Curso Claude Pro",
     lpUrl: "https://claude.impacta.com.br",
+    // Convencao oficial: campanha tem "CLAUDEPRO" no nome. Mantemos por
+    // documentacao mesmo que metaAdNameFilter tenha precedencia.
     metaCampaignFilter: "CLAUDEPRO",
+    // Realidade do que o user criou no Meta: ads sao "M1-REEL-PARE-PERGUNTAR-V1",
+    // "M1-REEL-SO-CURSO-ROBO-V1". Campanha real provavelmente nao tem
+    // CLAUDEPRO no nome, entao filtramos a nivel de AD com prefixo M1-REEL.
+    metaAdNameFilter: "M1-REEL-",
     googleCampaignFilter: "CLAUDEPRO",
     campaignSlug: "claude-pro-maio-2026",
     engagedCheckoutSharedIds: ["x68jpj7w3k"],

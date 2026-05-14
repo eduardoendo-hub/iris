@@ -7,7 +7,6 @@ import { ChannelTable } from "@/components/ChannelTable";
 import { CTAPositionTable } from "@/components/CTAPositionTable";
 import { CaptacaoSourceTable } from "@/components/CaptacaoSourceTable";
 import { DailyInsightCard } from "@/components/DailyInsightCard";
-import { InsightItem } from "@/components/InsightItem";
 import { LeadsTable } from "@/components/LeadsTable";
 import { SalesTable } from "@/components/SalesTable";
 import { SaleFormButton } from "@/components/SaleFormButton";
@@ -27,7 +26,6 @@ import {
   MOCK_KPIS,
   MOCK_CHANNELS,
   MOCK_CTA_POSITION,
-  MOCK_INSIGHTS,
 } from "@/lib/mock-data";
 
 export const dynamic = "force-dynamic";
@@ -519,25 +517,6 @@ export default async function CockpitPage({
             )}
           </div>
 
-          {/* Sub-seção: Anomalias mock (legado, vai sair quando o agente cobrir tudo) */}
-          <div className="flex flex-col gap-3 mt-6">
-            <h3
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: "var(--fg1)",
-                textTransform: "uppercase",
-                letterSpacing: "var(--ls-eyebrow)",
-              }}
-            >
-              Anomalias detectadas (auto)
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {MOCK_INSIGHTS.map((i) => (
-                <InsightItem key={i.id} {...i} />
-              ))}
-            </div>
-          </div>
         </Section>
       </main>
 
