@@ -21,6 +21,7 @@ type Row = {
   customerPhone: string | null;
   amount: number | null;
   currency: string | null;
+  eventAt: Date | string;
   firstSeenAt: Date | string;
   lastUpdatedAt: Date | string;
 };
@@ -70,13 +71,13 @@ function formatBRL(n: number | null): string {
 }
 
 export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCount: number }) {
-  // Ordena: status mais quente primeiro, depois lastUpdatedAt desc
+  // Ordena: status mais quente primeiro, depois eventAt desc (evento mais recente)
   const sorted = [...rows].sort((a, b) => {
     const pa = statusPriority(a.status);
     const pb = statusPriority(b.status);
     if (pa !== pb) return pa - pb;
-    const da = typeof a.lastUpdatedAt === "string" ? new Date(a.lastUpdatedAt) : a.lastUpdatedAt;
-    const db = typeof b.lastUpdatedAt === "string" ? new Date(b.lastUpdatedAt) : b.lastUpdatedAt;
+    const da = typeof a.eventAt === "string" ? new Date(a.eventAt) : a.eventAt;
+    const db = typeof b.eventAt === "string" ? new Date(b.eventAt) : b.eventAt;
     return db.getTime() - da.getTime();
   });
 
@@ -179,7 +180,7 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {formatDate(r.lastUpdatedAt)}
+                      {formatDate(r.eventAt)}
                     </td>
                     <td
                       className="px-4 py-2.5"

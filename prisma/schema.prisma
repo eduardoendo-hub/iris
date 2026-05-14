@@ -307,13 +307,18 @@ model EngagedPurchase {
   customerPhone   String?
   amount          Decimal? @db.Decimal(15, 2)
   currency        String?
+  // eventAt = quando o EVENTO aconteceu no Engaged (extraido do payload).
+  // Use no UI pra "Data" — bate com a UX do user que ve em outras telas.
+  // lastUpdatedAt eh auto-managed (toda gravacao no DB atualiza) — serve
+  // pra debug/audit, NAO pra display.
+  eventAt         DateTime @default(now())
   firstSeenAt     DateTime @default(now())
   lastUpdatedAt   DateTime @updatedAt
   saleId          String?  // FK soft pra Sale quando virou PAID
 
   @@unique([productSlug, externalId])
   @@index([productSlug, status])
-  @@index([lastUpdatedAt])
+  @@index([eventAt])
 }
 
 // ============================================================

@@ -164,13 +164,14 @@ export default async function CockpitPage({
     customerPhone: string | null;
     amount: number | null;
     currency: string | null;
+    eventAt: Date;
     firstSeenAt: Date;
     lastUpdatedAt: Date;
   }> = [];
   try {
     const raw = await prisma.engagedPurchase.findMany({
       where: { productSlug: slug, status: { not: "PAID" } },
-      orderBy: { lastUpdatedAt: "desc" },
+      orderBy: { eventAt: "desc" },
       take: 50,
     });
     engagedLeadsCount = raw.length;
@@ -184,6 +185,7 @@ export default async function CockpitPage({
       customerPhone: r.customerPhone,
       amount: r.amount ? Number(r.amount) : null,
       currency: r.currency,
+      eventAt: r.eventAt,
       firstSeenAt: r.firstSeenAt,
       lastUpdatedAt: r.lastUpdatedAt,
     }));

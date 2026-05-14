@@ -523,6 +523,9 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   const amount = pickAmount(p);
   const currency = (p.currency || "BRL").toUpperCase();
   const saleDate = pickSaleDate(p);
+  // eventAt = quando o evento ocorreu no Engaged (mesmo extrator usado pra
+  // saleDate). Usado pra mostrar "Data" no UI. NAO eh o save time.
+  const eventAt = saleDate;
 
   // externalId eh chave de unicidade — sem ela nao da pra upsert idempotente
   if (!externalId) {
@@ -552,10 +555,13 @@ export async function processEngagedPayload(rawBody: string): Promise<{
         customerPhone,
         amount: amount > 0 ? amount : null,
         currency: amount > 0 ? currency : null,
+        eventAt,
+        firstSeenAt: eventAt, // primeira vez vista = data do primeiro evento
       },
       update: {
         status: purchaseStatus,
         lastEventType: eventType ?? "",
+        eventAt, // ultimo evento real do Engaged (nao save time)
         // So atualiza dados do cliente se o novo payload trouxe (evita
         // sobrescrever name/email/phone com null vindo de evento parcial)
         ...(customerName ? { customerName } : {}),
