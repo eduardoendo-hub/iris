@@ -48,12 +48,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // GOOGLE_CLIENT_ID nao e secret (vai pro browser do usuario no fluxo
+  // OAuth). Mostrar inteiro ajuda a diagnosticar quebra de linha, paste
+  // duplicado, etc. Secrets continuam mascarados.
+  const clientIdRaw = process.env.GOOGLE_CLIENT_ID || "";
+  const clientIdEscaped = JSON.stringify(clientIdRaw); // mostra \n, \r, espacos como \uXXXX
+
   return NextResponse.json({
     NEXTAUTH_SECRET: describe(process.env.NEXTAUTH_SECRET),
     AUTH_SECRET: describe(process.env.AUTH_SECRET),
     NEXTAUTH_URL: describe(process.env.NEXTAUTH_URL),
     AUTH_URL: describe(process.env.AUTH_URL),
     GOOGLE_CLIENT_ID: describe(process.env.GOOGLE_CLIENT_ID, ".apps.googleusercontent.com"),
+    GOOGLE_CLIENT_ID_full: clientIdEscaped, // valor inteiro (nao secret)
+    GOOGLE_CLIENT_ID_charCodes_first10: Array.from(clientIdRaw.slice(0, 10)).map(
+      (c) => c.charCodeAt(0)
+    ),
+    GOOGLE_CLIENT_ID_charCodes_last10: Array.from(clientIdRaw.slice(-10)).map(
+      (c) => c.charCodeAt(0)
+    ),
     AUTH_GOOGLE_ID: describe(process.env.AUTH_GOOGLE_ID, ".apps.googleusercontent.com"),
     GOOGLE_CLIENT_SECRET: describe(process.env.GOOGLE_CLIENT_SECRET),
     AUTH_GOOGLE_SECRET: describe(process.env.AUTH_GOOGLE_SECRET),
