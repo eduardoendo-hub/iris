@@ -68,6 +68,61 @@ function loadConfig(productSlug: string): {
 }
 
 /**
+ * Debug — chama a Meta Insights API exatamente como o ingest faz e retorna
+ * URL + rows brutos. Util pra investigar quando spend nao bate com Ads Manager.
+ */
+export async function debugMetaInsights(opts: {
+  productSlug: string;
+  days?: number;
+}): Promise<{
+  url: string;
+  filter: { level: string; filter: string | null; campaignFilter: string | null; adNameFilter: string | null };
+  rows: DailyInsight[];
+  rawCount: number;
+}> {
+  const { productSlug } = opts;
+  const days = Math.min(Math.max(opts.days ?? 5, 1), 30);
+  const { accessToken, adAccountId, campaignFilter, adNameFilter } = loadConfig(productSlug);
+  const fields = ["spend", "impressions", "clicks", "reach", "cpc", "cpm", "ctr"].join(",");
+  const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/insights`);
+  url.searchParams.set("fields", fields);
+  url.searchParams.set("date_preset", pickDatePreset(days));
+  url.searchParams.set("time_increment", "1");
+  let level: string;
+  let filterStr: string | null = null;
+  if (adNameFilter) {
+    level = "ad";
+    filterStr = JSON.stringify([{ field: "ad.name", operator: "CONTAIN", value: adNameFilter }]);
+    url.searchParams.set("level", level);
+    url.searchParams.set("filtering", filterStr);
+  } else if (campaignFilter) {
+    level = "campaign";
+    filterStr = JSON.stringify([{ field: "campaign.name", operator: "CONTAIN", value: campaignFilter }]);
+    url.searchParams.set("level", level);
+    url.searchParams.set("filtering", filterStr);
+  } else {
+    level = "account";
+    url.searchParams.set("level", level);
+  }
+  url.searchParams.set("limit", "500");
+  url.searchParams.set("access_token", accessToken);
+
+  const r = await fetch(url.toString());
+  const json = (await r.json()) as GraphResponse;
+  if (!r.ok || json.error) {
+    throw new Error(`Meta API: ${json.error?.message || `HTTP ${r.status}`}`);
+  }
+  // Mascara o token na URL retornada
+  const safeUrl = url.toString().replace(/access_token=[^&]+/, "access_token=***");
+  return {
+    url: safeUrl,
+    filter: { level, filter: filterStr, campaignFilter, adNameFilter },
+    rows: json.data ?? [],
+    rawCount: (json.data ?? []).length,
+  };
+}
+
+/**
  * Lista TODAS as campanhas da Ad Account (sem filtro). Usado pra debug —
  * quando o filter nao bate, o user precisa ver quais nomes existem.
  */

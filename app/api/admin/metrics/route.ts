@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ingestGoogleAds } from "@/lib/ingest/google-ads";
-import { ingestMetaAds, listMetaCampaigns } from "@/lib/ingest/meta-ads";
+import { ingestMetaAds, listMetaCampaigns, debugMetaInsights } from "@/lib/ingest/meta-ads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -107,10 +107,19 @@ export async function POST(req: NextRequest) {
       const campaigns = await listMetaCampaigns(product);
       return NextResponse.json({ action, total: campaigns.length, campaigns });
     }
+    if (action === "debug-meta-insights") {
+      const result = await debugMetaInsights({ productSlug: product, days });
+      return NextResponse.json({ action, ...result });
+    }
     return NextResponse.json(
       {
         error: "unknown_action",
-        supported: ["ingest-google-ads", "ingest-meta-ads", "list-meta-campaigns"],
+        supported: [
+          "ingest-google-ads",
+          "ingest-meta-ads",
+          "list-meta-campaigns",
+          "debug-meta-insights",
+        ],
       },
       { status: 400 }
     );
