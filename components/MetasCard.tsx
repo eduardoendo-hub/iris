@@ -114,11 +114,17 @@ function MetaRow({ label, atual, alvo, format, direction, hint }: Meta) {
   const barFill = Math.min(Math.max(ratio, 0), 1.5); // cap a 1.5 pra nao explodir
   const barPercent = Math.min(barFill / 1.5, 1) * 100; // normaliza pra 0-100% da largura
 
+  // Percent label: pra min=quanto do alvo atingiu; pra max=quanto do limite consumiu
+  const percent = ratio * 100;
+  const percentLabel = `${percent >= 1000 ? Math.round(percent) : percent.toFixed(percent >= 100 ? 0 : 1)}%`;
+  const percentTooltip =
+    direction === "min" ? "do alvo atingido" : "do limite consumido";
+
   return (
     <div
       className="grid items-center gap-3 px-4 py-2"
       style={{
-        gridTemplateColumns: "minmax(110px, 1fr) minmax(170px, auto) minmax(80px, 2fr) auto",
+        gridTemplateColumns: "minmax(110px, 1fr) minmax(170px, auto) minmax(80px, 2fr) 56px auto",
         borderTop: "1px solid var(--cockpit-border)",
         fontSize: 12,
       }}
@@ -146,7 +152,7 @@ function MetaRow({ label, atual, alvo, format, direction, hint }: Meta) {
           overflow: "hidden",
           minWidth: 60,
         }}
-        title={`${(ratio * 100).toFixed(0)}% ${direction === "min" ? "do alvo" : "do limite"}`}
+        title={`${percent.toFixed(0)}% ${percentTooltip}`}
       >
         <div
           style={{
@@ -157,6 +163,19 @@ function MetaRow({ label, atual, alvo, format, direction, hint }: Meta) {
           }}
         />
       </div>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          fontWeight: 700,
+          color: s.color,
+          textAlign: "right",
+          whiteSpace: "nowrap",
+        }}
+        title={percentTooltip}
+      >
+        {percentLabel}
+      </span>
       <span
         style={{
           color: s.color,
