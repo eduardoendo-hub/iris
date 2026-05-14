@@ -176,11 +176,13 @@ const EngagedWebhook = z
     // origem da venda no IRIS
     queryParams: z.record(z.string(), z.unknown()).optional(),
 
-    // Datas
+    // Datas — Engaged usa camelCase no payload real (updatedAt/createdAt)
     paid_at: z.string().optional(),
     confirmed_at: z.string().optional(),
     created_at: z.string().optional(),
     occurred_at: z.string().optional(),
+    updatedAt: z.string().optional(), // Engaged: hora do ultimo evento (PAID = pagamento)
+    createdAt: z.string().optional(), // Engaged: hora da criacao da compra
 
     // Produto
     product_slug: z.string().optional(),
@@ -345,7 +347,18 @@ function matchProduct(p: Parsed): ProductConfig | null {
 // ProductConfig completo baseado em sharedId/productId. Mais robusto.
 
 function pickSaleDate(p: Parsed): Date {
-  const ts = p.paid_at || p.confirmed_at || p.occurred_at || p.created_at;
+  // Ordem de preferencia: paid_at (campo explicito de pagamento) →
+  // confirmed_at → updatedAt (Engaged real, hora do ULTIMO evento) →
+  // occurred_at → createdAt/created_at (criacao da compra).
+  // updatedAt prevalece sobre createdAt pq o webhook eh sobre o EVENTO
+  // mais recente, nao a primeira criacao.
+  const ts =
+    p.paid_at ||
+    p.confirmed_at ||
+    p.updatedAt ||
+    p.occurred_at ||
+    p.createdAt ||
+    p.created_at;
   if (!ts) return new Date();
   const d = new Date(ts);
   return isNaN(d.getTime()) ? new Date() : d;
