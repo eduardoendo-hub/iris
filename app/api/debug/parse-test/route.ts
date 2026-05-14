@@ -61,6 +61,35 @@ export async function GET(req: NextRequest) {
     created_at: payload.created_at,
   };
 
+  // Replica EXATAMENTE o schema Zod do engaged route pra ver se Zod
+  // sobrevive ao updatedAt apos parse. Se nao sobrevive aqui, eh
+  // problema de schema; se sobrevive, eh outro lugar.
+  const { z } = await import("zod");
+  const TestSchema = z
+    .object({
+      updatedAt: z.string().optional(),
+      createdAt: z.string().optional(),
+      paid_at: z.string().optional(),
+    })
+    .passthrough();
+  let zodOutput: Record<string, unknown> = {};
+  try {
+    const parsed = TestSchema.safeParse(payload);
+    if (parsed.success) {
+      const p = parsed.data as Record<string, unknown>;
+      zodOutput = {
+        success: true,
+        updatedAt_in_parsed: p.updatedAt,
+        createdAt_in_parsed: p.createdAt,
+        paid_at_in_parsed: p.paid_at,
+      };
+    } else {
+      zodOutput = { success: false, error: parsed.error.message };
+    }
+  } catch (e) {
+    zodOutput = { exception: e instanceof Error ? e.message : String(e) };
+  }
+
   // Simula a ordem do pickSaleDate atual
   const order = [
     "paid_at",
@@ -98,5 +127,6 @@ export async function GET(req: NextRequest) {
     deployedCodeHint: hasCamelcaseFix
       ? "Codigo tem updatedAt na pickOrder — fix 57f5197 deployado"
       : "Codigo NAO tem updatedAt — fix 57f5197 nao deployado ainda",
+    zodTestParse: zodOutput,
   });
 }
