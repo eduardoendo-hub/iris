@@ -357,22 +357,34 @@ export default async function CockpitPage({
   }
 
   // ────────────────────────────────────────────────────────────────
-  // Metas da campanha — todos os indicadores vs alvos do plano de MKT
+  // Metas da campanha — busca a campanha ATIVA do produto no DB.
+  // Fallback nos defaults hardcoded se nenhuma campanha cadastrada
+  // (vai funcionar enquanto user nao cria via /admin/campaigns).
   // ────────────────────────────────────────────────────────────────
-  // Targets vem do knowledge base lib/agent/knowledge/campaign-plan.md:
-  //   - 30 matriculas, R$ 44.970 receita, R$ 9.000 budget total
-  //   - CAC max R$ 300, ROAS alvo 5x, CPL alvo R$ 32-36
+  let activeCampaign: Awaited<ReturnType<typeof prisma.campaign.findFirst>> = null;
+  try {
+    activeCampaign = await prisma.campaign.findFirst({
+      where: { productSlug: slug, isActive: true },
+    });
+  } catch {
+    // tabela Campaign nao existe ainda (pre-migration)
+  }
+
   const CAMPAIGN_GOALS = {
-    matriculas: 30,
-    receita: 44970,
-    midiaTotal: 9000, // limite — quer gastar menos
-    cacMax: 300,
-    roasAlvo: 5.0,
-    cplAlvo: 36, // pega o teto da faixa 32-36
-    convLeadMatricula: 11, // % alvo (faixa 11-12%)
+    matriculas: activeCampaign?.goalEnrollments ?? 30,
+    receita: activeCampaign?.goalRevenue ? Number(activeCampaign.goalRevenue) : 44970,
+    midiaTotal: activeCampaign?.mediaBudget ? Number(activeCampaign.mediaBudget) : 9000,
+    cacMax: activeCampaign?.goalCac ? Number(activeCampaign.goalCac) : 300,
+    roasAlvo: activeCampaign?.goalRoas ? Number(activeCampaign.goalRoas) : 5.0,
+    cplAlvo: activeCampaign?.goalCpl ? Number(activeCampaign.goalCpl) : 36,
+    convLeadMatricula: 11,
   };
-  const CAMPAIGN_START_ISO = "2026-05-11";
-  const CAMPAIGN_END_ISO = "2026-06-07"; // ultimo dia de matricula
+  const CAMPAIGN_START_ISO = activeCampaign
+    ? activeCampaign.startDate.toISOString().slice(0, 10)
+    : "2026-05-11";
+  const CAMPAIGN_END_ISO = activeCampaign
+    ? activeCampaign.endDate.toISOString().slice(0, 10)
+    : "2026-06-07";
 
   // Spend ACUMULADO total da campanha (desde dia 1)
   let spendCampaignTotal = 0;

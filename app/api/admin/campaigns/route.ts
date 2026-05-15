@@ -1,0 +1,99 @@
+/**
+ * /api/admin/campaigns — gerencia campanhas configuradas via /admin.
+ *
+ * Auth: sessao NextAuth (role=ADMIN) OU X-Admin-Secret.
+ *
+ * GET → lista todas as campanhas (ordenadas por startDate desc)
+ * POST → cria nova campanha
+ *   Body: { slug, productSlug, name, startDate, endDate, ... }
+ *
+ * Constraint: max 1 ativa por (productSlug). Pra ativar outra, primeiro
+ * desativar a anterior (ou usar /api/admin/campaigns/:id/activate).
+ */
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { checkAdminAuth } from "@/lib/admin-auth";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const CampaignCreate = z.object({
+  slug: z.string().min(2).max(80),
+  productSlug: z.string().min(1).max(64),
+  name: z.string().min(2).max(200),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  mediaBudget: z.coerce.number().nonnegative().optional(),
+  productionCostLP: z.coerce.number().nonnegative().optional(),
+  productionCostAds: z.coerce.number().nonnegative().optional(),
+  productionCostOther: z.coerce.number().nonnegative().optional(),
+  goalEnrollments: z.coerce.number().int().nonnegative().optional(),
+  goalRevenue: z.coerce.number().nonnegative().optional(),
+  goalCac: z.coerce.number().nonnegative().optional(),
+  goalRoas: z.coerce.number().nonnegative().optional(),
+  goalCpl: z.coerce.number().nonnegative().optional(),
+  marketingPlan: z.string().max(200_000).optional(),
+  marketingPlanFilename: z.string().max(255).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export async function GET(req: NextRequest) {
+  const a = await checkAdminAuth(req);
+  if (!a.authorized) {
+    return NextResponse.json({ error: "unauthorized", reason: a.reason }, { status: 401 });
+  }
+  const campaigns = await prisma.campaign.findMany({
+    orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
+  });
+  return NextResponse.json({ total: campaigns.length, campaigns });
+}
+
+export async function POST(req: NextRequest) {
+  const a = await checkAdminAuth(req);
+  if (!a.authorized) {
+    return NextResponse.json({ error: "unauthorized", reason: a.reason }, { status: 401 });
+  }
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+  const parsed = CampaignCreate.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "validation_error", issues: parsed.error.issues },
+      { status: 422 }
+    );
+  }
+  const data = parsed.data;
+  try {
+    // Se isActive=true, desativa outras do mesmo produto primeiro (transaction)
+    if (data.isActive) {
+      await prisma.$transaction([
+        prisma.campaign.updateMany({
+          where: { productSlug: data.productSlug, isActive: true },
+          data: { isActive: false },
+        }),
+      ]);
+    }
+    const campaign = await prisma.campaign.create({
+      data: {
+        ...data,
+        createdByUserId: a.mode === "session" ? a.userId : null,
+      },
+    });
+    return NextResponse.json({ status: "created", campaign }, { status: 201 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const conflict = msg.includes("Unique constraint") || msg.includes("unique");
+    return NextResponse.json(
+      {
+        error: conflict ? "conflict" : "db_error",
+        message: conflict ? "Slug ou outra campanha ativa em conflito" : msg,
+      },
+      { status: conflict ? 409 : 500 }
+    );
+  }
+}

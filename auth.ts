@@ -39,12 +39,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user }) {
       if (!user.email) return false;
       const email = user.email.toLowerCase();
-      // Se nenhum filtro setado → permite qualquer um (modo dev/aberto).
-      if (ALLOWED_DOMAINS.length === 0 && ALLOWED_EMAILS.length === 0) return true;
-      // Permite se email exato estiver na whitelist
-      if (ALLOWED_EMAILS.includes(email)) return true;
-      // Ou se o dominio do email estiver na whitelist
       const domain = email.split("@")[1];
+
+      // Fontes de whitelist (em ordem de prioridade):
+      //   1. DB (AllowedEmail / AllowedDomain) — gerenciavel via /admin
+      //   2. env ALLOWED_EMAIL_ADDRESSES / ALLOWED_EMAIL_DOMAINS — fallback inicial
+      // Se TODAS estiverem vazias → permite (modo dev/aberto).
+
+      // 1. DB checks
+      try {
+        const [dbEmail, dbDomain] = await Promise.all([
+          prisma.allowedEmail.findUnique({ where: { email } }),
+          domain ? prisma.allowedDomain.findUnique({ where: { domain } }) : null,
+        ]);
+        if (dbEmail) return true;
+        if (dbDomain) return true;
+        // Se a tabela tem registros mas nenhum bate, bloqueia (DB e o source of truth)
+        const [emailCount, domainCount] = await Promise.all([
+          prisma.allowedEmail.count(),
+          prisma.allowedDomain.count(),
+        ]);
+        if (emailCount > 0 || domainCount > 0) {
+          return false;
+        }
+      } catch {
+        // DB nao acessivel — cai pro fallback env
+      }
+
+      // 2. env fallback
+      if (ALLOWED_DOMAINS.length === 0 && ALLOWED_EMAILS.length === 0) return true;
+      if (ALLOWED_EMAILS.includes(email)) return true;
       return Boolean(domain && ALLOWED_DOMAINS.includes(domain));
     },
     async session({ session, user }) {

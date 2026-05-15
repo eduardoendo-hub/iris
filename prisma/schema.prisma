@@ -38,6 +38,72 @@ model Product {
 }
 
 // ============================================================
+// CAMPAIGN — campanha de mkt configuravel via /admin
+// ============================================================
+// Cada produto pode ter N campanhas, mas apenas 1 ATIVA por vez.
+// Constraint enforce via partial unique index (Postgres):
+//   CREATE UNIQUE INDEX ... ON Campaign(productSlug) WHERE isActive = true
+// Define metas + investimentos pro cockpit IRIS calcular ROAS real
+// (mídia + custos de produção).
+model Campaign {
+  id              String   @id @default(cuid())
+  slug            String   @unique  // ex: "claude-pro-mai-2026"
+  productSlug     String              // bate com Product.slug
+  name            String              // ex: "Lançamento Claude Pro Maio/2026"
+
+  startDate       DateTime            // dia 1 da campanha (SP midnight)
+  endDate         DateTime            // último dia de matrículas (SP midnight)
+
+  // INVESTIMENTOS (R$, opcionais — preenche conforme tem dado)
+  mediaBudget         Decimal? @db.Decimal(15, 2)  // Meta + Google paid
+  productionCostLP    Decimal? @db.Decimal(15, 2)  // Custo da LP
+  productionCostAds   Decimal? @db.Decimal(15, 2)  // Custo das peças/criativos
+  productionCostOther Decimal? @db.Decimal(15, 2)  // Outros (consultorias, etc)
+
+  // METAS (opcionais)
+  goalEnrollments     Int?
+  goalRevenue         Decimal? @db.Decimal(15, 2)
+  goalCac             Decimal? @db.Decimal(15, 2)
+  goalRoas            Decimal? @db.Decimal(8, 2)   // ex: 5.00 = 5x
+  goalCpl             Decimal? @db.Decimal(15, 2)
+
+  // Plano de marketing (texto grande, opcional)
+  marketingPlan         String?  @db.Text
+  marketingPlanFilename String?
+
+  isActive        Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdByUserId String?
+
+  @@index([productSlug, isActive])
+  @@index([startDate])
+}
+
+// ============================================================
+// ACESSO — emails individuais e dominios autorizados a logar
+// ============================================================
+// Antes: hardcoded em env ALLOWED_EMAIL_DOMAINS / ALLOWED_EMAIL_ADDRESSES.
+// Agora: armazenado no DB, gerenciado via /admin/access.
+// Auth.ts checa esses + envs (envs continuam funcionando como fallback)
+model AllowedEmail {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  note          String?
+  addedAt       DateTime @default(now())
+  addedByUserId String?
+}
+
+model AllowedDomain {
+  id            String   @id @default(cuid())
+  domain        String   @unique
+  note          String?
+  addedAt       DateTime @default(now())
+  addedByUserId String?
+}
+
+// ============================================================
 // SNAPSHOT — foto agregada de métricas num bucket de tempo
 // ============================================================
 model Snapshot {
