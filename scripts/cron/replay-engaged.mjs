@@ -8,7 +8,7 @@
  *
  * Uso no Coolify:
  *   Command: node scripts/cron/replay-engaged.mjs
- *   Frequency: */15 * * * *   (a cada 15 min)
+ *   Frequency: a cada 15 min
  *
  * Env vars necessarias no container:
  *   IRIS_WEBHOOK_SECRET

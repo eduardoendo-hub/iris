@@ -7,7 +7,7 @@
  *
  * Uso no Coolify:
  *   Command: node scripts/cron/ingest-meta.mjs
- *   Frequency: */30 * * * *   (a cada 30 min)
+ *   Frequency: a cada 30 min
  *
  * Env vars necessarias no container:
  *   IRIS_WEBHOOK_SECRET
