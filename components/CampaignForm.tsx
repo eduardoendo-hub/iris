@@ -119,7 +119,14 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.message || json.error || "Falha ao salvar");
+        // Se for validation_error com issues do Zod, mostra os campos
+        const issues = json?.issues as Array<{ path: (string | number)[]; message: string }> | undefined;
+        if (Array.isArray(issues) && issues.length > 0) {
+          const lines = issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(" · ");
+          setError(`Validação: ${lines}`);
+        } else {
+          setError(json.message || json.error || "Falha ao salvar");
+        }
         setSubmitting(false);
         return;
       }

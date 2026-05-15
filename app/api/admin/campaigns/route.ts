@@ -18,23 +18,38 @@ import { checkAdminAuth } from "@/lib/admin-auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// nullishNumber: aceita null, undefined, "" (string) ou numero >= 0.
+// null/undefined/"" viram undefined (campo nao seta no DB).
+const nullishNumber = z.preprocess(
+  (v) => (v === null || v === "" ? undefined : v),
+  z.coerce.number().nonnegative().optional()
+);
+const nullishInt = z.preprocess(
+  (v) => (v === null || v === "" ? undefined : v),
+  z.coerce.number().int().nonnegative().optional()
+);
+const nullishString = z.preprocess(
+  (v) => (v === null || v === "" ? undefined : v),
+  z.string().optional()
+);
+
 const CampaignCreate = z.object({
   slug: z.string().min(2).max(80),
   productSlug: z.string().min(1).max(64),
   name: z.string().min(2).max(200),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
-  mediaBudget: z.coerce.number().nonnegative().optional(),
-  productionCostLP: z.coerce.number().nonnegative().optional(),
-  productionCostAds: z.coerce.number().nonnegative().optional(),
-  productionCostOther: z.coerce.number().nonnegative().optional(),
-  goalEnrollments: z.coerce.number().int().nonnegative().optional(),
-  goalRevenue: z.coerce.number().nonnegative().optional(),
-  goalCac: z.coerce.number().nonnegative().optional(),
-  goalRoas: z.coerce.number().nonnegative().optional(),
-  goalCpl: z.coerce.number().nonnegative().optional(),
-  marketingPlan: z.string().max(200_000).optional(),
-  marketingPlanFilename: z.string().max(255).optional(),
+  mediaBudget: nullishNumber,
+  productionCostLP: nullishNumber,
+  productionCostAds: nullishNumber,
+  productionCostOther: nullishNumber,
+  goalEnrollments: nullishInt,
+  goalRevenue: nullishNumber,
+  goalCac: nullishNumber,
+  goalRoas: nullishNumber,
+  goalCpl: nullishNumber,
+  marketingPlan: nullishString,
+  marketingPlanFilename: nullishString,
   isActive: z.boolean().optional(),
 });
 

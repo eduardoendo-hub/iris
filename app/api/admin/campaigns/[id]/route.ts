@@ -19,23 +19,38 @@ import { checkAdminAuth } from "@/lib/admin-auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Pra UPDATE permite null explicito (limpar campo) — null vira null no DB.
+// undefined → nao mexe no campo.
+const nullableNumber = z.preprocess(
+  (v) => (v === "" ? null : v),
+  z.coerce.number().nonnegative().nullable().optional()
+);
+const nullableInt = z.preprocess(
+  (v) => (v === "" ? null : v),
+  z.coerce.number().int().nonnegative().nullable().optional()
+);
+const nullableString = z.preprocess(
+  (v) => (v === "" ? null : v),
+  z.string().nullable().optional()
+);
+
 const CampaignUpdate = z.object({
   slug: z.string().min(2).max(80).optional(),
   productSlug: z.string().min(1).max(64).optional(),
   name: z.string().min(2).max(200).optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
-  mediaBudget: z.coerce.number().nonnegative().nullable().optional(),
-  productionCostLP: z.coerce.number().nonnegative().nullable().optional(),
-  productionCostAds: z.coerce.number().nonnegative().nullable().optional(),
-  productionCostOther: z.coerce.number().nonnegative().nullable().optional(),
-  goalEnrollments: z.coerce.number().int().nonnegative().nullable().optional(),
-  goalRevenue: z.coerce.number().nonnegative().nullable().optional(),
-  goalCac: z.coerce.number().nonnegative().nullable().optional(),
-  goalRoas: z.coerce.number().nonnegative().nullable().optional(),
-  goalCpl: z.coerce.number().nonnegative().nullable().optional(),
-  marketingPlan: z.string().max(200_000).nullable().optional(),
-  marketingPlanFilename: z.string().max(255).nullable().optional(),
+  mediaBudget: nullableNumber,
+  productionCostLP: nullableNumber,
+  productionCostAds: nullableNumber,
+  productionCostOther: nullableNumber,
+  goalEnrollments: nullableInt,
+  goalRevenue: nullableNumber,
+  goalCac: nullableNumber,
+  goalRoas: nullableNumber,
+  goalCpl: nullableNumber,
+  marketingPlan: nullableString,
+  marketingPlanFilename: nullableString,
   isActive: z.boolean().optional(),
 });
 
