@@ -131,22 +131,33 @@ export function DailyInsightCard({
         </p>
       </div>
 
-      {sortedRecs.length > 0 && (
-        <div
-          className="px-5 py-4 flex flex-col gap-2"
-          style={{ borderTop: "1px dashed var(--cockpit-border)", background: "rgba(10,186,181,0.03)" }}
+      <div
+        className="px-5 py-4 flex flex-col gap-2"
+        style={{ borderTop: "1px dashed var(--cockpit-border)", background: "rgba(10,186,181,0.03)" }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            textTransform: "uppercase",
+            letterSpacing: "var(--ls-eyebrow)",
+            fontWeight: 700,
+            color: "var(--brand)",
+          }}
         >
+          Próximas ações
+        </span>
+        {sortedRecs.length === 0 ? (
           <span
             style={{
-              fontSize: 10,
-              textTransform: "uppercase",
-              letterSpacing: "var(--ls-eyebrow)",
-              fontWeight: 700,
-              color: "var(--brand)",
+              fontSize: 12,
+              color: "var(--fg2)",
+              fontStyle: "italic",
+              marginTop: 4,
             }}
           >
-            Próximas ações
+            O agente não gerou ações para este dia (re-rode o cron para forçar a regeneração).
           </span>
+        ) : (
           <ol className="flex flex-col gap-3" style={{ paddingLeft: 0, marginTop: 4 }}>
             {sortedRecs.map((r, i) => (
               <li
@@ -189,8 +200,8 @@ export function DailyInsightCard({
               </li>
             ))}
           </ol>
-        </div>
-      )}
+        )}
+      </div>
     </article>
   );
 }

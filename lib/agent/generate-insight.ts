@@ -85,10 +85,15 @@ const SYSTEM_PROMPT_TAIL = `\n\n---\n\nFORMATO DE OUTPUT: JSON estruturado confo
 
 - summary (string, 3 a 6 linhas, TEXTO PURO sem markdown): analise narrativa que explica o porque dos numeros. Cita os 2 a 3 dados mais importantes do dia e como se comparam com media 7d, ontem ou target. Nao use **, *, #, listas, ou qualquer marcacao.
 
-- recommendations (array 3 a 5 itens), cada um:
+- recommendations (array OBRIGATORIO, EXATAMENTE 3 a 5 itens — schema rejeita menos de 3):
   - priority (int 1 a 5, 1 = mais urgente)
-  - action (string, TEXTO PURO): acao especifica e executavel. Nao "melhorar o anuncio" mas "Pausar M1-VIDEO-PARE-PERGUNTAR no conjunto A (CTR 0,4% vs 1,5% alvo) e ativar variacao M1-VIDEO-20PROJETOS"
-  - expected_impact (string, TEXTO PURO): efeito esperado quantificado. "CPL deve cair pra R$ 50 (vs R$ 87 atual) e gerar +6 leads/dia"
+  - action (string, MINIMO 20 chars, TEXTO PURO): acao especifica e executavel. Nao "melhorar o anuncio" mas "Pausar M1-VIDEO-PARE-PERGUNTAR no conjunto A (CTR 0,4% vs 1,5% alvo) e ativar variacao M1-VIDEO-20PROJETOS"
+  - expected_impact (string, MINIMO 15 chars, TEXTO PURO): efeito esperado quantificado. "CPL deve cair pra R$ 50 (vs R$ 87 atual) e gerar +6 leads/dia"
+
+REGRA ABSOLUTA DAS RECOMENDACOES:
+- SEMPRE gere 3 a 5 recomendacoes, MESMO se o dia tem volume baixo, MESMO se as metricas estao todas dentro do alvo, MESMO se nao ha dados de midia ainda.
+- Se nao ha gasto, recomende "Subir campanha X com R$ Y/dia hoje". Se nao ha vendas, recomende "Monitorar CPL nas proximas 24h, alvo R$ Z". Se tudo esta bom, recomende "Manter setup atual + duplicar conjunto vencedor com +30% budget".
+- NUNCA retorne array vazio. NUNCA retorne menos de 3 itens. O schema valida e o app quebra se voce nao seguir.
 
 Lembre: o tempo do leitor e limitado. Headline + summary devem dar a foto em 30 segundos. TEXTO PURO em todos os campos.`;
 
@@ -107,12 +112,14 @@ const OUTPUT_SCHEMA = {
     summary: { type: "string" },
     recommendations: {
       type: "array",
+      minItems: 3,
+      maxItems: 5,
       items: {
         type: "object",
         properties: {
-          priority: { type: "integer" },
-          action: { type: "string" },
-          expected_impact: { type: "string" },
+          priority: { type: "integer", minimum: 1, maximum: 5 },
+          action: { type: "string", minLength: 20 },
+          expected_impact: { type: "string", minLength: 15 },
         },
         required: ["priority", "action", "expected_impact"],
         additionalProperties: false,
@@ -287,6 +294,17 @@ export async function generateInsight(opts: {
     return {
       outcome: "error",
       reason: `json_parse_failed: ${err instanceof Error ? err.message : String(err)} / raw=${textBlock.text.slice(0, 200)}`,
+    };
+  }
+
+  // Sanity check — schema obriga >=3 recommendations mas defendemos contra
+  // edge case onde o modelo escapa do schema (raro, mas acontece em retry).
+  if (!Array.isArray(output.recommendations) || output.recommendations.length < 1) {
+    return {
+      outcome: "error",
+      reason: `empty_recommendations: modelo retornou ${
+        Array.isArray(output.recommendations) ? output.recommendations.length : "nao-array"
+      } recomendacoes. Headline gerada: "${output.headline?.slice(0, 80) ?? "—"}". Re-rode cron pra forcar regeneracao.`,
     };
   }
 
