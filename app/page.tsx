@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { Topbar } from "@/components/Topbar";
-import { ProductSelector } from "@/components/ProductSelector";
+import { CampaignSelector, type CampaignOption } from "@/components/CampaignSelector";
 import { TabNav } from "@/components/TabNav";
 import { KPICard } from "@/components/KPICard";
 import { ChannelTable } from "@/components/ChannelTable";
@@ -24,7 +24,6 @@ import {
 } from "@/components/icons";
 import { prisma } from "@/lib/prisma";
 import {
-  MOCK_PRODUCTS,
   MOCK_KPIS,
   MOCK_CHANNELS,
   MOCK_CTA_POSITION,
@@ -32,7 +31,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { product?: string };
+type SearchParams = { campaign?: string; product?: string };
 
 export default async function CockpitPage({
   searchParams,
@@ -40,7 +39,42 @@ export default async function CockpitPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const slug = params.product ?? "claude-pro";
+
+  // Lista TODAS as campanhas pro combo. Se nenhuma cadastrada, fallback
+  // pros produtos mock (legado, primeira vez sem nada no DB).
+  let campaignOptions: CampaignOption[] = [];
+  try {
+    const all = await prisma.campaign.findMany({
+      orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
+      select: { slug: true, name: true, productSlug: true, isActive: true },
+    });
+    campaignOptions = all.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      productSlug: c.productSlug,
+      isActive: c.isActive,
+    }));
+  } catch {
+    // Tabela Campaign nao existe ainda
+  }
+
+  // Decide qual campanha exibir:
+  //   1. ?campaign=<slug> explicito
+  //   2. campanha ATIVA do produto especificado em ?product=
+  //   3. primeira campanha ATIVA cadastrada
+  //   4. fallback: produto "claude-pro" sem campanha (modo legado)
+  const explicitCampaign = params.campaign
+    ? campaignOptions.find((c) => c.slug === params.campaign)
+    : null;
+  const productFromParam = params.product;
+  const activeForProduct = productFromParam
+    ? campaignOptions.find((c) => c.productSlug === productFromParam && c.isActive)
+    : null;
+  const firstActive = campaignOptions.find((c) => c.isActive) ?? null;
+
+  const selectedCampaign = explicitCampaign ?? activeForProduct ?? firstActive ?? null;
+  const slug = selectedCampaign?.productSlug ?? productFromParam ?? "claude-pro";
+  const selectedCampaignSlug = selectedCampaign?.slug ?? null;
   const productKey = slug as keyof typeof MOCK_KPIS;
 
   const kpi = MOCK_KPIS[productKey] ?? MOCK_KPIS["claude-pro"];
@@ -361,11 +395,21 @@ export default async function CockpitPage({
   // Fallback nos defaults hardcoded se nenhuma campanha cadastrada
   // (vai funcionar enquanto user nao cria via /admin/campaigns).
   // ────────────────────────────────────────────────────────────────
+  // activeCampaign aqui significa "a campanha que o cockpit esta exibindo
+  // metas/datas". Se o user selecionou explicitamente uma no combo, usa
+  // ela; senao, a ATIVA do produto. (Permite olhar metas de campanhas
+  // passadas ao selecionar.)
   let activeCampaign: Awaited<ReturnType<typeof prisma.campaign.findFirst>> = null;
   try {
-    activeCampaign = await prisma.campaign.findFirst({
-      where: { productSlug: slug, isActive: true },
-    });
+    if (selectedCampaignSlug) {
+      activeCampaign = await prisma.campaign.findUnique({
+        where: { slug: selectedCampaignSlug },
+      });
+    } else {
+      activeCampaign = await prisma.campaign.findFirst({
+        where: { productSlug: slug, isActive: true },
+      });
+    }
   } catch {
     // tabela Campaign nao existe ainda (pre-migration)
   }
@@ -518,9 +562,9 @@ export default async function CockpitPage({
             opacity: 0.95,
           }}
         >
-          Produto
+          Campanha
         </span>
-        <ProductSelector currentSlug={slug} products={[...MOCK_PRODUCTS]} />
+        <CampaignSelector currentSlug={selectedCampaignSlug} campaigns={campaignOptions} />
       </div>
 
       <TabNav active="cockpit" productSlug={slug} />

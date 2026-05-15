@@ -1,16 +1,16 @@
 import Image from "next/image";
 import { Topbar } from "@/components/Topbar";
-import { ProductSelector } from "@/components/ProductSelector";
+import { CampaignSelector, type CampaignOption } from "@/components/CampaignSelector";
 import { TabNav } from "@/components/TabNav";
 import { PeriodSelector } from "@/components/PeriodSelector";
 import { CaptacaoChart } from "@/components/CaptacaoChart";
 import { VendasChart, VendasCountChart } from "@/components/VendasChart";
 import { getDailyEvents, getDailySales } from "@/lib/analytics";
-import { MOCK_PRODUCTS } from "@/lib/mock-data";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { product?: string; days?: string };
+type SearchParams = { campaign?: string; product?: string; days?: string };
 
 export default async function AnalyticsPage({
   searchParams,
@@ -18,7 +18,31 @@ export default async function AnalyticsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const slug = params.product ?? "claude-pro";
+
+  // Mesma logica de selecao do cockpit
+  let campaignOptions: CampaignOption[] = [];
+  try {
+    const all = await prisma.campaign.findMany({
+      orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
+      select: { slug: true, name: true, productSlug: true, isActive: true },
+    });
+    campaignOptions = all.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      productSlug: c.productSlug,
+      isActive: c.isActive,
+    }));
+  } catch {
+    // tabela nao existe ainda
+  }
+  const explicitCampaign = params.campaign
+    ? campaignOptions.find((c) => c.slug === params.campaign)
+    : null;
+  const firstActive = campaignOptions.find((c) => c.isActive) ?? null;
+  const selectedCampaign = explicitCampaign ?? firstActive ?? null;
+  const slug = selectedCampaign?.productSlug ?? params.product ?? "claude-pro";
+  const selectedCampaignSlug = selectedCampaign?.slug ?? null;
+
   const daysRaw = parseInt(params.days ?? "30", 10);
   const days = [10, 30, 60].includes(daysRaw) ? daysRaw : 30;
 
@@ -44,9 +68,9 @@ export default async function AnalyticsPage({
             fontWeight: 700,
           }}
         >
-          Produto
+          Campanha
         </span>
-        <ProductSelector currentSlug={slug} products={[...MOCK_PRODUCTS]} />
+        <CampaignSelector currentSlug={selectedCampaignSlug} campaigns={campaignOptions} />
       </div>
 
       <TabNav active="analytics" productSlug={slug} />
