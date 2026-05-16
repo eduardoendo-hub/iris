@@ -22,18 +22,55 @@ if (!SECRET) {
   process.exit(1);
 }
 
-const url = `${BASE}/api/admin/metrics?action=ingest-meta-ads&days=${DAYS}`;
+const url = `${BASE}/api/admin/metrics?action=ingest-meta-ads&product=claude-pro&days=${DAYS}`;
 console.log(`POST ${url}`);
+
+let r;
+let text;
 try {
-  const r = await fetch(url, {
+  r = await fetch(url, {
     method: "POST",
     headers: { "X-Admin-Secret": SECRET },
   });
-  const text = await r.text();
-  console.log(`HTTP ${r.status}`);
-  console.log(text.slice(0, 2000));
-  if (!r.ok) process.exit(1);
+  text = await r.text();
 } catch (err) {
-  console.error("ERR:", err.message);
+  console.error("ERR fetch:", err.message);
   process.exit(1);
 }
+
+console.log(`HTTP ${r.status}`);
+console.log(text.slice(0, 4000));
+
+if (!r.ok) {
+  console.error(`\nFAIL: HTTP ${r.status}`);
+  process.exit(1);
+}
+
+let body;
+try {
+  body = JSON.parse(text);
+} catch {
+  console.error("\nFAIL: resposta nao e JSON valido");
+  process.exit(1);
+}
+
+// Endpoint pode responder {error: "ingest_failed", message: "..."}
+if (body.error) {
+  console.error(`\nFAIL: ${body.error} - ${body.message ?? "sem mensagem"}`);
+  process.exit(1);
+}
+
+const result = body.result;
+if (result) {
+  console.log(`\nOK: ${result.daysFetched} dias buscados, ${result.samplesUpserted} samples upserted`);
+  if (result.details && result.details.length) {
+    console.log("Por dia:");
+    for (const d of result.details) {
+      console.log(`  ${d.date}: spend=R$${d.spend.toFixed(2)} clicks=${d.clicks} impr=${d.impressions}`);
+    }
+  } else {
+    console.log("(zero dias com dado — verificar filtro de campanha ou se Meta esta entregando)");
+  }
+}
+
+process.exit(0);
