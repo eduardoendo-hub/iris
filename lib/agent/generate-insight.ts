@@ -310,6 +310,23 @@ export async function generateInsight(opts: {
 
   const analysisDateUTC = new Date(opts.snapshot.analysisDate + "T03:00:00.000Z");
 
+  // Verifica se ja existe pra distinguir created vs updated.
+  let preExisting: { id: string } | null = null;
+  try {
+    preExisting = await prisma.dailyInsight.findUnique({
+      where: {
+        productSlug_campaignSlug_analysisDate: {
+          productSlug: opts.snapshot.productSlug,
+          campaignSlug: opts.campaignSlug ?? "",
+          analysisDate: analysisDateUTC,
+        },
+      },
+      select: { id: true },
+    });
+  } catch {
+    /* findUnique nao quebra o fluxo */
+  }
+
   // Upsert pra ser idempotente — re-rodar mesmo dia atualiza, nao duplica.
   try {
     const saved = await prisma.dailyInsight.upsert({
@@ -351,7 +368,7 @@ export async function generateInsight(opts: {
     });
 
     return {
-      outcome: saved.generatedAt.getTime() === saved.generatedAt.getTime() ? "created" : "updated",
+      outcome: preExisting ? "updated" : "created",
       insightId: saved.id,
       output,
       tokensIn: resp.usage.input_tokens,
