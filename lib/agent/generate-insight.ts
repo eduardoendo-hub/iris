@@ -112,8 +112,10 @@ const OUTPUT_SCHEMA = {
     summary: { type: "string" },
     recommendations: {
       type: "array",
-      minItems: 3,
-      maxItems: 5,
+      // NAO usar minItems/maxItems > 1 — Anthropic structured outputs
+      // rejeita: "For 'array' type, 'minItems' values other than 0 or 1
+      // are not supported". A regra "3 a 5 itens" fica no prompt + na
+      // checagem defensiva em runtime (linha ~302 que rejeita empty).
       items: {
         type: "object",
         properties: {
