@@ -114,16 +114,19 @@ const OUTPUT_SCHEMA = {
     summary: { type: "string" },
     recommendations: {
       type: "array",
-      // NAO usar minItems/maxItems > 1 — Anthropic structured outputs
-      // rejeita: "For 'array' type, 'minItems' values other than 0 or 1
-      // are not supported". A regra "3 a 5 itens" fica no prompt + na
-      // checagem defensiva em runtime (linha ~302 que rejeita empty).
+      // Anthropic structured outputs tem JSON schema muito restrito:
+      //   - minItems > 1: rejeitado ("only 0 or 1 are supported")
+      //   - minimum/maximum em integer: rejeitado
+      //   - minLength em string: provavelmente rejeitado tambem
+      // So usamos type + properties + required + additionalProperties.
+      // Regras de quantidade/tamanho ficam no prompt + sanity check
+      // em runtime (linha ~302 que rejeita empty array).
       items: {
         type: "object",
         properties: {
-          priority: { type: "integer", minimum: 1, maximum: 5 },
-          action: { type: "string", minLength: 20 },
-          expected_impact: { type: "string", minLength: 15 },
+          priority: { type: "integer" },
+          action: { type: "string" },
+          expected_impact: { type: "string" },
         },
         required: ["priority", "action", "expected_impact"],
         additionalProperties: false,
