@@ -32,6 +32,9 @@ const ALLOWED_ORIGINS = new Set([
   // Curso Claude Pro
   "https://claude.impacta.com.br",       // canonico (branding Impacta)
   "https://claude.technowhub.ai",        // alias hosted (mesma LP)
+  // People AI Lab
+  "https://peopleai.impacta.com.br",     // canonico (branding Impacta)
+  "https://peopleai.technowhub.ai",      // alias hosted (mesma LP)
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev
