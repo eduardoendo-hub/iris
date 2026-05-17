@@ -75,6 +75,22 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     engagedCheckoutSharedIds: ["x68jpj7w3k"],
     engagedProductIds: ["69fe28452501c7001ca77fe5"],
   },
+  "peopleai": {
+    slug: "peopleai",
+    name: "People AI Lab",
+    lpUrl: "https://peopleai.impacta.com.br",
+    // Convenção esperada nas campanhas Meta/Google: nome contendo "PEOPLEAI"
+    // (ex.: "M1-PROSP-PEOPLEAI-JUL26", "G1-SEARCH-PEOPLEAI-JUL26").
+    metaCampaignFilter: "PEOPLEAI",
+    googleCampaignFilter: "PEOPLEAI",
+    campaignSlug: "peopleai-julho-2026",
+    // Engaged checkout SharedID — extraído de
+    //   https://impacta.site.engaged.com.br/p/checkout/ligvw5t7yi
+    // (o trecho após /p/checkout/ é o sharedId). Sem isso, os webhooks de
+    // Purchase do Engaged não atribuem ao produto e caem fora do cockpit.
+    engagedCheckoutSharedIds: ["ligvw5t7yi"],
+  },
+
   // Future products — descomentar quando entrarem:
   //
   // "direito5": {
@@ -84,15 +100,6 @@ export const PRODUCTS: Record<string, ProductConfig> = {
   //   metaCampaignFilter: "DIREITO5",
   //   googleCampaignFilter: "DIREITO5",
   //   campaignSlug: "direito5-jun-2026",
-  // },
-  //
-  // "peopleai": {
-  //   slug: "peopleai",
-  //   name: "People AI Lab",
-  //   lpUrl: "https://peopleai.impacta.com.br",
-  //   metaCampaignFilter: "PEOPLEAI",
-  //   googleCampaignFilter: "PEOPLEAI",
-  //   campaignSlug: "peopleai-jul-2026",
   // },
 };
 
