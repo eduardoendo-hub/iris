@@ -269,8 +269,71 @@ function pickEmail(p: Parsed): string | null {
   );
 }
 
+/**
+ * Deep-scan recursivo: varre o objeto procurando QUALQUER campo cujo nome
+ * pareca telefone (phone, celular, telefone, whatsapp, mobile, cellphone)
+ * e devolve o primeiro valor com 8+ digitos. Cobre o caso da Engaged
+ * aninhar o telefone num campo fora da lista conhecida.
+ *
+ * Tambem trata telefone como objeto {ddd, number} / {areaCode, number} /
+ * {countryCode, areaCode, number} — concatena os pedacos.
+ */
+const PHONE_KEY_RE = /phone|celular|telefone|whats|mobile|cell/i;
+
+function digitsOf(s: string): string {
+  return s.replace(/\D/g, "");
+}
+
+function phoneFromObject(o: Record<string, unknown>): string | null {
+  // {ddd|areaCode|countryCode, number|numero}
+  const parts: string[] = [];
+  for (const k of ["countryCode", "country_code", "ddi", "ddd", "areaCode", "area_code"]) {
+    const v = o[k];
+    if (typeof v === "string" || typeof v === "number") parts.push(String(v));
+  }
+  for (const k of ["number", "numero", "phone", "value"]) {
+    const v = o[k];
+    if (typeof v === "string" || typeof v === "number") parts.push(String(v));
+  }
+  const joined = digitsOf(parts.join(""));
+  return joined.length >= 8 ? joined : null;
+}
+
+function deepFindPhone(value: unknown, depth = 0): string | null {
+  if (depth > 5 || value == null) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = deepFindPhone(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    // 1) Campo direto com nome de telefone
+    for (const [k, v] of Object.entries(obj)) {
+      if (!PHONE_KEY_RE.test(k)) continue;
+      if (typeof v === "string" && digitsOf(v).length >= 8) return v.trim();
+      if (typeof v === "number" && String(v).length >= 8) return String(v);
+      if (v && typeof v === "object") {
+        const fromObj = phoneFromObject(v as Record<string, unknown>);
+        if (fromObj) return fromObj;
+      }
+    }
+    // 2) Recursao nos filhos
+    for (const v of Object.values(obj)) {
+      if (v && typeof v === "object") {
+        const found = deepFindPhone(v, depth + 1);
+        if (found) return found;
+      }
+    }
+  }
+  return null;
+}
+
 function pickPhone(p: Parsed): string | null {
-  return (
+  // 1) Lugares conhecidos (rapido, previsivel)
+  const known =
     p.user?.phone ||
     p.userPaymentProfile?.phone ||
     p.customer?.phone ||
@@ -278,8 +341,11 @@ function pickPhone(p: Parsed): string | null {
     p.buyer?.phone ||
     p.payer?.phone ||
     p.phone ||
-    null
-  );
+    null;
+  if (known) return known;
+  // 2) Fallback: deep-scan no payload inteiro (Engaged aninha em campo
+  //    fora da lista conhecida — ex: user.contact.cellphone)
+  return deepFindPhone(p);
 }
 
 function pickAmount(p: Parsed): number {
