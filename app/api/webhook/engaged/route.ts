@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { PRODUCTS, type ProductConfig } from "@/lib/products";
+import { promoteSiblingLeadsToPaid } from "@/lib/engaged-dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -610,33 +611,19 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     };
   }
 
-  // ─── STEP 2a: Promove TODAS as outras EngagedPurchase do mesmo cliente
-  // pra PAID (Engaged manda _id diferente por evento, entao lead_captured
-  // e waiting_payment podem ter criado linhas com externalId diferentes do
-  // evento .paid atual — sem isso, o cliente fica "preso" como lead nao-pago).
+  // ─── STEP 2a: Promove sibling leads do mesmo cliente pra PAID ─────────
+  // Engaged manda _id diferente por evento, entao lead_captured e
+  // waiting_payment criam linhas com externalId diferente do evento .paid.
+  // Match por email exato OU telefone (ultimos 8 digitos) OU nome aprox.
   try {
-    const normEmail = customerEmail ? customerEmail.toLowerCase().trim() : null;
-    const normPhone = customerPhone ? customerPhone.replace(/\D/g, "") : null;
-    const siblingFilter: Array<Record<string, unknown>> = [];
-    if (normEmail) siblingFilter.push({ customerEmail: { equals: normEmail, mode: "insensitive" } });
-    if (normPhone && normPhone.length >= 8) siblingFilter.push({ customerPhone: { contains: normPhone } });
-    if (siblingFilter.length > 0) {
-      await prisma.engagedPurchase.updateMany({
-        where: {
-          productSlug,
-          status: { not: "PAID" },
-          id: { not: engagedPurchase.id },
-          OR: siblingFilter,
-        },
-        data: {
-          status: "PAID",
-          lastEventType: `${eventType ?? ""} (auto-promoted via sibling paid)`,
-          eventAt,
-        },
-      });
-    }
+    await promoteSiblingLeadsToPaid({
+      productSlug,
+      target: { customerName, customerEmail, customerPhone },
+      excludeIds: [engagedPurchase.id],
+      reason: `engaged ${eventType ?? "purchase.paid"}`,
+    });
   } catch (err) {
-    // promocao de irmaos eh best-effort — nao quebra o fluxo principal
+    // best-effort — nao quebra fluxo
     console.error("[engaged] sibling promote failed:", err);
   }
 

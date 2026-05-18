@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { promoteSiblingLeadsToPaid } from "@/lib/engaged-dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,7 +100,35 @@ export async function POST(req: NextRequest) {
   }
   try {
     const sale = await prisma.sale.create({ data: parsed.data });
-    return NextResponse.json({ status: "created", sale }, { status: 201 });
+
+    // Apos criar venda manual (consultor, direta, manual), tenta remover
+    // o cliente da lista de "Leads Engaged" — pode ja ter capturado por
+    // outro canal antes do consultor fechar.
+    let dedup: Awaited<ReturnType<typeof promoteSiblingLeadsToPaid>> | null = null;
+    try {
+      dedup = await promoteSiblingLeadsToPaid({
+        productSlug: sale.productSlug,
+        target: {
+          customerEmail: sale.customerEmail,
+          customerPhone: sale.customerPhone,
+          customerName: sale.customerName,
+        },
+        reason: `manual sale ${sale.source}:${sale.id}`,
+      });
+    } catch (err) {
+      // best-effort — nao quebra criacao da venda
+      console.error("[sales] dedup engaged leads failed:", err);
+    }
+
+    return NextResponse.json(
+      {
+        status: "created",
+        sale,
+        engagedLeadsPromoted: dedup?.promotedIds.length ?? 0,
+        engagedLeadsMatchedBy: dedup?.matchedBy ?? [],
+      },
+      { status: 201 }
+    );
   } catch (err) {
     return NextResponse.json(
       { error: "db_error", message: err instanceof Error ? err.message : String(err) },
