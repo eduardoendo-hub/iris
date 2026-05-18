@@ -186,7 +186,11 @@ export default async function CockpitPage({
     // DB nao disponivel — segue com lista vazia
   }
 
-  // Leads do Engaged — todos os status != PAID (pra mostrar funil pre-venda)
+  // Leads do Engaged — status != PAID E que NAO tenham Sale ou outra
+  // EngagedPurchase=PAID com o mesmo email/telefone (dedupe defensivo,
+  // pq Engaged manda _id diferente por evento → pode criar 2 linhas pro
+  // mesmo cliente: uma DRAFT e outra PAID). Tabela so deve mostrar quem
+  // realmente nao pagou ainda.
   let engagedLeadsCount = 0;
   let engagedLeads: Array<{
     id: string;
@@ -203,13 +207,43 @@ export default async function CockpitPage({
     lastUpdatedAt: Date;
   }> = [];
   try {
+    // 1. Coleta TODOS os emails/telefones que ja pagaram (Sale + EngagedPurchase=PAID)
+    const [paidEngagedRows, saleRows] = await Promise.all([
+      prisma.engagedPurchase.findMany({
+        where: { productSlug: slug, status: "PAID" },
+        select: { customerEmail: true, customerPhone: true },
+      }),
+      prisma.sale.findMany({
+        where: { productSlug: slug },
+        select: { customerEmail: true, customerPhone: true },
+      }),
+    ]);
+    const normEmail = (e: string | null) => (e ? e.toLowerCase().trim() : null);
+    const normPhone = (p: string | null) => (p ? p.replace(/\D/g, "") : null);
+    const paidEmails = new Set<string>();
+    const paidPhones = new Set<string>();
+    for (const r of [...paidEngagedRows, ...saleRows]) {
+      const e = normEmail(r.customerEmail);
+      const p = normPhone(r.customerPhone);
+      if (e) paidEmails.add(e);
+      if (p) paidPhones.add(p);
+    }
+
+    // 2. Busca leads nao-pagos e filtra os que ja pagaram em outra linha
     const raw = await prisma.engagedPurchase.findMany({
       where: { productSlug: slug, status: { not: "PAID" } },
       orderBy: { eventAt: "desc" },
-      take: 50,
+      take: 200, // sobra margem pra filtragem em app
     });
-    engagedLeadsCount = raw.length;
-    engagedLeads = raw.map((r) => ({
+    const filtered = raw.filter((r) => {
+      const e = normEmail(r.customerEmail);
+      const p = normPhone(r.customerPhone);
+      if (e && paidEmails.has(e)) return false; // ja pagou (sale ou engaged PAID)
+      if (p && paidPhones.has(p)) return false;
+      return true;
+    });
+    engagedLeadsCount = filtered.length;
+    engagedLeads = filtered.slice(0, 50).map((r) => ({
       id: r.id,
       externalId: r.externalId,
       status: r.status,
