@@ -5,10 +5,16 @@ const OPTIONS = [10, 30, 60] as const;
 export function PeriodSelector({
   current,
   productSlug,
+  campaignSlug,
 }: {
   current: number;
   productSlug: string;
+  campaignSlug?: string | null;
 }) {
+  // Preserva a campanha selecionada ao trocar de periodo.
+  const scope = campaignSlug
+    ? `campaign=${encodeURIComponent(campaignSlug)}`
+    : `product=${encodeURIComponent(productSlug)}`;
   return (
     <div className="flex items-center gap-1">
       <span
@@ -28,7 +34,7 @@ export function PeriodSelector({
         return (
           <Link
             key={d}
-            href={`/analytics?product=${productSlug}&days=${d}`}
+            href={`/analytics?${scope}&days=${d}`}
             style={{
               padding: "6px 12px",
               borderRadius: 6,

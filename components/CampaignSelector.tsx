@@ -25,9 +25,13 @@ export type CampaignOption = {
 export function CampaignSelector({
   currentSlug,
   campaigns,
+  basePath = "/",
 }: {
   currentSlug: string | null;
   campaigns: CampaignOption[];
+  /** Rota onde o selector vive — "/" cockpit ou "/analytics". Trocar de
+   *  campanha mantem o usuario na mesma aba em vez de jogar pro cockpit. */
+  basePath?: string;
 }) {
   const [open, setOpen] = useState(false);
   if (campaigns.length === 0) return null;
@@ -106,7 +110,7 @@ export function CampaignSelector({
             {campaigns.map((c) => (
               <Link
                 key={c.slug}
-                href={`/?campaign=${c.slug}`}
+                href={`${basePath}?campaign=${encodeURIComponent(c.slug)}`}
                 className="flex items-center gap-2 px-4 py-2.5 hover:bg-white/5 transition-colors"
                 style={{
                   color: c.slug === current.slug ? "var(--brand)" : "var(--fg1)",

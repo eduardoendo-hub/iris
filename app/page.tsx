@@ -601,7 +601,7 @@ export default async function CockpitPage({
         <CampaignSelector currentSlug={selectedCampaignSlug} campaigns={campaignOptions} />
       </div>
 
-      <TabNav active="cockpit" productSlug={slug} />
+      <TabNav active="cockpit" productSlug={slug} campaignSlug={selectedCampaignSlug} />
 
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-5 flex flex-col gap-5">
         {metricsSourceLabel === "mock" && <MockBanner />}

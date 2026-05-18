@@ -70,14 +70,18 @@ export default async function AnalyticsPage({
         >
           Campanha
         </span>
-        <CampaignSelector currentSlug={selectedCampaignSlug} campaigns={campaignOptions} />
+        <CampaignSelector
+          currentSlug={selectedCampaignSlug}
+          campaigns={campaignOptions}
+          basePath="/analytics"
+        />
       </div>
 
-      <TabNav active="analytics" productSlug={slug} />
+      <TabNav active="analytics" productSlug={slug} campaignSlug={selectedCampaignSlug} />
 
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col gap-8">
         <div className="flex items-center justify-end">
-          <PeriodSelector current={days} productSlug={slug} />
+          <PeriodSelector current={days} productSlug={slug} campaignSlug={selectedCampaignSlug} />
         </div>
 
         {/* CAPTAÇÃO */}
