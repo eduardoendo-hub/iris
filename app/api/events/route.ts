@@ -35,6 +35,9 @@ const ALLOWED_ORIGINS = new Set([
   // People AI Lab
   "https://peopleai.impacta.com.br",     // canonico (branding Impacta)
   "https://peopleai.technowhub.ai",      // alias hosted (mesma LP)
+  // Código Zero
+  "https://codigozero.technowhub.ai",    // canonico (LP servida aqui)
+  "https://codigozero.impacta.com.br",   // redirect -> technowhub
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev

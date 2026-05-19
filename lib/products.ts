@@ -90,6 +90,20 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // Purchase do Engaged não atribuem ao produto e caem fora do cockpit.
     engagedCheckoutSharedIds: ["ligvw5t7yi"],
   },
+  "codigozero": {
+    slug: "codigozero",
+    name: "Código Zero",
+    // LP servida em codigozero.technowhub.ai; codigozero.impacta.com.br redireciona pra cá.
+    lpUrl: "https://codigozero.technowhub.ai",
+    // Convenção esperada nas campanhas Meta/Google: nome contendo "CODIGOZERO"
+    // (ex.: "M1-PROSP-CODIGOZERO-JUN26", "G1-SEARCH-CODIGOZERO-JUN26").
+    metaCampaignFilter: "CODIGOZERO",
+    googleCampaignFilter: "CODIGOZERO",
+    campaignSlug: "codigozero-junho-2026",
+    // Engaged checkout SharedID — trecho após /p/checkout/ na URL do checkout.
+    // TODO: confirmar o sharedId real quando o link do Engaged for definido.
+    engagedCheckoutSharedIds: ["codigo-zero"],
+  },
 
   // Future products — descomentar quando entrarem:
   //
