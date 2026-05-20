@@ -15,6 +15,7 @@ export function KPICard({
   emphasis = "normal",
   secondaryValue,
   secondaryLabel,
+  secondaryHint,
 }: {
   label: string;
   value: number | null;
@@ -28,6 +29,8 @@ export function KPICard({
   /** Segundo valor mostrado embaixo do valor principal — ex: "no mes: R$ 1.234,56". */
   secondaryValue?: number | null;
   secondaryLabel?: string;
+  /** Texto pequeno abaixo do secondaryValue — ex: breakdown "Meta + Google + Produção" */
+  secondaryHint?: string;
 }) {
   const formatted = value === null ? "—" : formatValue(value, format);
   const deltaColor =
@@ -121,6 +124,12 @@ export function KPICard({
             {formatValue(secondaryValue, format)}
           </span>
         </div>
+      )}
+
+      {secondaryValue != null && secondaryHint && (
+        <span style={{ color: "var(--fg2)", fontSize: 10, marginTop: -2 }}>
+          {secondaryHint}
+        </span>
       )}
 
       {splits && splits.length > 0 && (

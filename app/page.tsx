@@ -457,6 +457,17 @@ export default async function CockpitPage({
     cplAlvo: activeCampaign?.goalCpl ? Number(activeCampaign.goalCpl) : 36,
     convLeadMatricula: 11,
   };
+
+  // Custos de producao cadastrados em /admin/campaigns (LP + criativos + outros).
+  // Somam UMA UNICA VEZ no mes (nao escalam diariamente como mídia paga).
+  const productionCostLP = Number(activeCampaign?.productionCostLP ?? 0);
+  const productionCostAds = Number(activeCampaign?.productionCostAds ?? 0);
+  const productionCostOther = Number(activeCampaign?.productionCostOther ?? 0);
+  const productionCostsTotal = productionCostLP + productionCostAds + productionCostOther;
+  // "no mês" no card de Investimento = Meta + Google ingerido + custos de
+  // producao da campanha (que sao gastos one-time mas entram no investimento
+  // total pra calculo honesto de ROAS/CAC executivo).
+  const totalInvestmentMonth = mediaInvestmentMonth + productionCostsTotal;
   const CAMPAIGN_START_ISO = activeCampaign
     ? activeCampaign.startDate.toISOString().slice(0, 10)
     : "2026-05-11";
@@ -649,13 +660,18 @@ export default async function CockpitPage({
               hint="visitas → clicks compra"
             />
             <KPICard
-              label="Investimento mídia"
+              label="Investimento"
               value={mediaInvestment}
               format="currency"
               icon={<WalletIcon size={14} />}
               hint="hoje · Meta + Google"
-              secondaryValue={mediaInvestmentMonth}
+              secondaryValue={totalInvestmentMonth}
               secondaryLabel="no mês"
+              secondaryHint={
+                productionCostsTotal > 0
+                  ? `Mídia ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(mediaInvestmentMonth)} + Produção ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(productionCostsTotal)}`
+                  : "Meta + Google"
+              }
             />
           </div>
         </Section>
