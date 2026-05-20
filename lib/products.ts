@@ -100,9 +100,9 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     metaCampaignFilter: "CODIGOZERO",
     googleCampaignFilter: "CODIGOZERO",
     campaignSlug: "codigozero-junho-2026",
-    // Engaged checkout SharedID — trecho após /p/checkout/ na URL do checkout.
-    // TODO: confirmar o sharedId real quando o link do Engaged for definido.
-    engagedCheckoutSharedIds: ["codigo-zero"],
+    // Engaged checkout SharedID — extraído de
+    //   https://impacta.site.engaged.com.br/p/checkout/wpjw515nvn
+    engagedCheckoutSharedIds: ["wpjw515nvn"],
   },
 
   // Future products — descomentar quando entrarem:
