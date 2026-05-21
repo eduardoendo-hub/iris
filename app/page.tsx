@@ -313,7 +313,37 @@ export default async function CockpitPage({
   }
 
   // ────────────────────────────────────────────────────────────────
-  // Detalhamento de captação por canal (UTM) — ultimos 7 dias
+  // Busca a campanha ATIVA antes do bloco de captacao, pra usar
+  // startDate como inicio da janela (em vez de hardcoded 7 dias).
+  // Cada nova turma cria nova campanha — a tabela mostra TUDO da
+  // campanha atual.
+  // ────────────────────────────────────────────────────────────────
+  let activeCampaignEarly: Awaited<ReturnType<typeof prisma.campaign.findFirst>> = null;
+  try {
+    if (selectedCampaignSlug) {
+      activeCampaignEarly = await prisma.campaign.findUnique({
+        where: { slug: selectedCampaignSlug },
+      });
+    } else {
+      activeCampaignEarly = await prisma.campaign.findFirst({
+        where: { productSlug: slug, isActive: true },
+      });
+    }
+  } catch {
+    /* tabela Campaign nao existe ainda */
+  }
+  const captacaoFromUTC = activeCampaignEarly?.startDate
+    ? new Date(activeCampaignEarly.startDate)
+    : (() => {
+        // Fallback pre-campanha: ultimos 14 dias (mais util que zero)
+        const d = new Date();
+        d.setUTCHours(0, 0, 0, 0);
+        d.setUTCDate(d.getUTCDate() - 13);
+        return d;
+      })();
+
+  // ────────────────────────────────────────────────────────────────
+  // Detalhamento de captação por canal (UTM) — toda a campanha
   // Agrega VisitEvent (cada evento da LP) por (utmSource, utmMedium,
   // utmCampaign, utmContent). utmContent carrega o nome do anuncio
   // (Meta substitui {{ad.name}} automaticamente) — permite ver qual peca
@@ -329,12 +359,9 @@ export default async function CockpitPage({
     clickWhats: number;
     leadForm: number;
   };
-  const captacaoDays = 7;
   let captacaoRows: CaptacaoRow[] = [];
   try {
-    const from = new Date();
-    from.setUTCHours(0, 0, 0, 0);
-    from.setUTCDate(from.getUTCDate() - (captacaoDays - 1));
+    const from = captacaoFromUTC;
     const grouped = await prisma.visitEvent.groupBy({
       by: ["utmSource", "utmMedium", "utmCampaign", "utmContent", "eventName"],
       where: { productSlug: slug, ts: { gte: from } },
@@ -435,13 +462,16 @@ export default async function CockpitPage({
   // metas/datas". Se o user selecionou explicitamente uma no combo, usa
   // ela; senao, a ATIVA do produto. (Permite olhar metas de campanhas
   // passadas ao selecionar.)
-  let activeCampaign: Awaited<ReturnType<typeof prisma.campaign.findFirst>> = null;
+  //
+  // Ja buscamos no topo do arquivo (activeCampaignEarly) pra usar startDate
+  // no bloco de captacao. Aqui so reaproveita — evita query duplicada.
+  let activeCampaign = activeCampaignEarly;
   try {
-    if (selectedCampaignSlug) {
+    if (!activeCampaign && selectedCampaignSlug) {
       activeCampaign = await prisma.campaign.findUnique({
         where: { slug: selectedCampaignSlug },
       });
-    } else {
+    } else if (!activeCampaign) {
       activeCampaign = await prisma.campaign.findFirst({
         where: { productSlug: slug, isActive: true },
       });
@@ -749,7 +779,10 @@ export default async function CockpitPage({
           eyebrow="Detalhamento de captação"
           title="Leads, canais e posição do CTA"
         >
-          <CaptacaoSourceTable rows={captacaoRows} days={captacaoDays} />
+          <CaptacaoSourceTable
+            rows={captacaoRows}
+            periodLabel={activeCampaignEarly ? "toda a campanha" : "últimos 14 dias"}
+          />
           <EngagedLeadsTable rows={engagedLeads} totalCount={engagedLeadsCount} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <ChannelTable rows={[...channels]} />

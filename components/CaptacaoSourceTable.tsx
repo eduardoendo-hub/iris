@@ -42,7 +42,14 @@ type Group = {
   ads: Row[];
 };
 
-export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number }) {
+export function CaptacaoSourceTable({
+  rows,
+  periodLabel = "toda a campanha",
+}: {
+  rows: Row[];
+  /** Label exibido no header — ex: "toda a campanha", "últimos 7 dias" */
+  periodLabel?: string;
+}) {
   const groups = useMemo(() => groupByCampaign(rows), [rows]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -76,7 +83,7 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
         style={{ borderBottom: "1px solid var(--cockpit-border)" }}
       >
         <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>
-          Por fonte (UTM) — últimos {days} dias
+          Por fonte (UTM) — {periodLabel}
         </h3>
         <span style={{ fontSize: 11, color: "var(--fg2)", fontFamily: "var(--font-mono)" }}>
           {fmtNum(totals.visits)} visitas · {fmtNum(totals.clickCompra)} cliques compra
@@ -99,11 +106,17 @@ export function CaptacaoSourceTable({ rows, days }: { rows: Row[]; days: number 
               <th className="text-left px-5 py-2">Canal</th>
               <th className="text-left px-5 py-2">Campanha / Anúncio</th>
               <th className="text-right px-5 py-2">Anúncios</th>
-              <th className="text-right px-5 py-2">Visitas</th>
-              <th className="text-right px-5 py-2">Compra</th>
-              <th className="text-right px-5 py-2">Consultor</th>
-              <th className="text-right px-5 py-2">WhatsApp</th>
-              <th className="text-right px-5 py-2">Conv %</th>
+              <th className="text-right px-5 py-2" title="Total de lp_view enviados pela LP">Visitas</th>
+              <th
+                className="text-right px-5 py-2"
+                title="Cliques no botão de compra (click_compra) — apenas INTENT, não é venda confirmada. Quem efetivamente pagou aparece em Vendas."
+                style={{ cursor: "help" }}
+              >
+                Cliques compra
+              </th>
+              <th className="text-right px-5 py-2" title="Cliques em Falar com consultor / form de lead">Consultor</th>
+              <th className="text-right px-5 py-2" title="Cliques no botão flutuante WhatsApp">WhatsApp</th>
+              <th className="text-right px-5 py-2" title="Conversão: cliques compra / visitas (intent rate)">Conv %</th>
             </tr>
           </thead>
           <tbody>
