@@ -14,7 +14,38 @@ type SaleRow = {
   currency: string;
   notes: string | null;
   saleDate: Date | string;
+  /** Atribuicao da venda — UTMs/queryParams capturados no checkout.
+   *  Pra ENGAGED: vem do queryParams do webhook (URL clicada na LP).
+   *  Mostrado em tooltip ao passar o mouse na origem. */
+  attribution?: Record<string, string> | null;
 };
+
+/** Monta o texto do tooltip da coluna "Origem" a partir da attribution. */
+function buildAttributionTooltip(attr: Record<string, string> | null | undefined): string | null {
+  if (!attr) return null;
+  const src = attr.utm_source;
+  const med = attr.utm_medium;
+  const camp = attr.utm_campaign;
+  const cnt = attr.utm_content;
+  const cupom = attr.cupom || attr.coupon;
+  const gclid = attr.gclid;
+  const fbclid = attr.fbclid;
+  const lines: string[] = [];
+  if (src || med) lines.push(`Canal: ${[src, med].filter(Boolean).join(" / ") || "—"}`);
+  if (camp) lines.push(`Campanha: ${camp}`);
+  if (cnt) lines.push(`Anúncio: ${cnt}`);
+  if (cupom) lines.push(`Cupom: ${cupom}`);
+  if (gclid) lines.push(`gclid: ${gclid.slice(0, 16)}…`);
+  if (fbclid) lines.push(`fbclid: ${fbclid.slice(0, 16)}…`);
+  if (lines.length === 0) {
+    // Sem UTMs canonicos mas tem algum dado — mostra raw
+    const raw = Object.entries(attr)
+      .map(([k, v]) => `${k}=${String(v).slice(0, 40)}`)
+      .join("\n");
+    return raw || null;
+  }
+  return lines.join("\n");
+}
 
 function formatDate(d: Date | string): string {
   const date = typeof d === "string" ? new Date(d) : d;
@@ -221,24 +252,53 @@ export function SalesTable({
                         )}
                       </td>
                       <td style={{ padding: "12px 16px" }}>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            fontSize: 10,
-                            padding: "2px 8px",
-                            borderRadius: 4,
-                            background: src.bg,
-                            color: src.color,
-                            fontWeight: 700,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                          }}
-                        >
-                          {src.icon}
-                          {src.label}
-                        </span>
+                        {(() => {
+                          const tooltip = buildAttributionTooltip(s.attribution);
+                          const attr = s.attribution ?? {};
+                          // Mostra "canal · campanha" abaixo do badge quando ENGAGED com attribution
+                          const channel = attr.utm_source && attr.utm_medium
+                            ? `${attr.utm_source} / ${attr.utm_medium}`
+                            : attr.utm_source || null;
+                          const camp = attr.utm_campaign || null;
+                          return (
+                            <div className="flex flex-col gap-1" title={tooltip ?? undefined}>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 10,
+                                  padding: "2px 8px",
+                                  borderRadius: 4,
+                                  background: src.bg,
+                                  color: src.color,
+                                  fontWeight: 700,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  cursor: tooltip ? "help" : "default",
+                                  width: "fit-content",
+                                }}
+                              >
+                                {src.icon}
+                                {src.label}
+                              </span>
+                              {(channel || camp) && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color: "var(--fg2)",
+                                    fontFamily: "var(--font-mono)",
+                                    lineHeight: 1.2,
+                                  }}
+                                >
+                                  {channel ?? ""}
+                                  {channel && camp ? " · " : ""}
+                                  {camp ?? ""}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td
                         style={{

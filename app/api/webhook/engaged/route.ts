@@ -431,6 +431,34 @@ function pickSaleDate(p: Parsed): Date {
   return isNaN(d.getTime()) ? new Date() : d;
 }
 
+/**
+ * Constroi objeto de atribuicao da venda — junta queryParams (vindos da LP
+ * no redirect pro Engaged), o objeto utm e os campos top-level utm_*.
+ * Preferencia: queryParams > utm > top-level (queryParams eh o mais fresco,
+ * vem direto da URL clicada). Devolve null se nao tem NADA.
+ */
+function pickAttribution(p: Parsed): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  // 1) queryParams — TUDO que veio na URL pro Engaged (UTMs + cupom + custom)
+  const q = (p.queryParams || {}) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(q)) {
+    if (typeof v === "string" && v.trim().length > 0) out[k] = v.trim();
+    else if (typeof v === "number") out[k] = String(v);
+  }
+  // 2) Objeto utm — fallback se queryParams nao trouxe
+  const utm = p.utm || {};
+  if (utm.source && !out.utm_source) out.utm_source = utm.source;
+  if (utm.medium && !out.utm_medium) out.utm_medium = utm.medium;
+  if (utm.campaign && !out.utm_campaign) out.utm_campaign = utm.campaign;
+  if (utm.content && !out.utm_content) out.utm_content = utm.content;
+  if (utm.term && !out.utm_term) out.utm_term = utm.term;
+  // 3) Top-level utm_* — ultimo fallback
+  if (p.utm_source && !out.utm_source) out.utm_source = p.utm_source;
+  if (p.utm_medium && !out.utm_medium) out.utm_medium = p.utm_medium;
+  if (p.utm_campaign && !out.utm_campaign) out.utm_campaign = p.utm_campaign;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function pickNotes(p: Parsed): string {
   const utm = p.utm || {};
   // Engaged: queryParams pode conter UTMs do redirect da LP
@@ -603,6 +631,9 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   const amount = pickAmount(p);
   const currency = (p.currency || "BRL").toUpperCase();
   const saleDate = pickSaleDate(p);
+  // Atribuicao da venda (UTMs, cupom, gclid, etc) — vem do redirect da LP
+  // pro Engaged e tambem do objeto utm que a Engaged preserva.
+  const attribution = pickAttribution(p);
   // eventAt = quando o evento ocorreu no Engaged (mesmo extrator usado pra
   // saleDate). Usado pra mostrar "Data" no UI. NAO eh o save time.
   const eventAt = saleDate;
@@ -637,6 +668,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
         currency: amount > 0 ? currency : null,
         eventAt,
         firstSeenAt: eventAt, // primeira vez vista = data do primeiro evento
+        attribution: attribution ?? undefined,
       },
       update: {
         status: purchaseStatus,
@@ -648,6 +680,10 @@ export async function processEngagedPayload(rawBody: string): Promise<{
         ...(customerEmail ? { customerEmail } : {}),
         ...(customerPhone ? { customerPhone } : {}),
         ...(amount > 0 ? { amount, currency } : {}),
+        // Attribution: so atualiza se o payload novo trouxe (evento .paid
+        // pode vir sem queryParams se o usuario fechou e voltou — preserva
+        // o que ja tinha do lead_captured/waiting_payment).
+        ...(attribution ? { attribution } : {}),
       },
     });
   } catch (err) {
@@ -703,6 +739,17 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     };
   }
 
+  // attribution preferida: a do payload atual; fallback: a que ja estava
+  // gravada na EngagedPurchase (evento .paid pode vir vazio se usuario
+  // perdeu querystring no checkout). Garante que SEMPRE persista a melhor.
+  const attributionForSale: Record<string, string> | null =
+    attribution ??
+    (engagedPurchase.attribution &&
+    typeof engagedPurchase.attribution === "object" &&
+    !Array.isArray(engagedPurchase.attribution)
+      ? (engagedPurchase.attribution as Record<string, string>)
+      : null);
+
   const saleData = {
     productSlug,
     source: "ENGAGED" as const,
@@ -715,6 +762,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     externalRef: p.payment_id || null,
     notes: pickNotes(p),
     saleDate,
+    attribution: attributionForSale ?? undefined,
   };
 
   try {
@@ -733,6 +781,9 @@ export async function processEngagedPayload(rawBody: string): Promise<{
           currency,
           notes: saleData.notes,
           saleDate,
+          // So sobrescreve attribution se temos uma nova; preserva existente
+          // (evita perder atribuicao em re-process de evento sem queryParams).
+          ...(attributionForSale ? { attribution: attributionForSale } : {}),
         },
       });
     } else {

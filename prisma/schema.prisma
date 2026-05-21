@@ -271,6 +271,11 @@ model Sale {
 
   notes String? @db.Text
 
+  // Atribuicao da venda — query params da URL no momento do checkout
+  // (UTMs, cupom, gclid, fbclid, etc). Pra vendas ENGAGED, copiado do
+  // queryParams do webhook (que veio da LP no redirect pro Engaged).
+  attribution Json?
+
   saleDate  DateTime @default(now())
   createdAt DateTime @default(now())
 
@@ -381,6 +386,10 @@ model EngagedPurchase {
   firstSeenAt     DateTime @default(now())
   lastUpdatedAt   DateTime @updatedAt
   saleId          String?  // FK soft pra Sale quando virou PAID
+
+  // Atribuicao — queryParams + utms vindos do webhook Engaged. Copiado pra
+  // Sale.attribution quando vira PAID. Permite saber canal/campanha da venda.
+  attribution     Json?
 
   @@unique([productSlug, externalId])
   @@index([productSlug, status])

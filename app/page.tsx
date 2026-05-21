@@ -272,6 +272,7 @@ export default async function CockpitPage({
     customerName: string; customerEmail: string | null; customerPhone: string | null;
     amount: number; currency: string; notes: string | null;
     saleDate: Date;
+    attribution: Record<string, string> | null;
   }> = [];
   try {
     const agg = await prisma.sale.aggregate({
@@ -305,6 +306,7 @@ export default async function CockpitPage({
       customerEmail: s.customerEmail, customerPhone: s.customerPhone,
       amount: Number(s.amount), currency: s.currency,
       notes: s.notes, saleDate: s.saleDate,
+      attribution: (s.attribution as Record<string, string> | null) ?? null,
     }));
   } catch {
     // tabela Sale nao existe ainda
