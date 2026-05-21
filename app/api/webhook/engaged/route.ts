@@ -432,30 +432,83 @@ function pickSaleDate(p: Parsed): Date {
 }
 
 /**
- * Constroi objeto de atribuicao da venda — junta queryParams (vindos da LP
- * no redirect pro Engaged), o objeto utm e os campos top-level utm_*.
- * Preferencia: queryParams > utm > top-level (queryParams eh o mais fresco,
- * vem direto da URL clicada). Devolve null se nao tem NADA.
+ * Mescla pares chave=valor de uma fonte tipo queryParams (objeto, string
+ * "utm=X&utm=Y", ou URL completa). Primeira fonte vence (preserva sinal mais cru).
+ */
+function mergeQuerySource(out: Record<string, string>, source: unknown): void {
+  if (!source) return;
+  if (typeof source === "string") {
+    const s = source.trim();
+    if (!s) return;
+    try {
+      const qs = s.startsWith("http") ? new URL(s).search.slice(1) : s.replace(/^\?/, "");
+      if (qs) {
+        const usp = new URLSearchParams(qs);
+        usp.forEach((v, k) => {
+          if (v && !out[k]) out[k] = v;
+        });
+      }
+    } catch {
+      /* string nao parseavel — ignora */
+    }
+    return;
+  }
+  if (typeof source === "object" && !Array.isArray(source)) {
+    for (const [k, v] of Object.entries(source as Record<string, unknown>)) {
+      if (out[k]) continue;
+      if (typeof v === "string" && v.trim()) out[k] = v.trim();
+      else if (typeof v === "number" || typeof v === "boolean") out[k] = String(v);
+    }
+  }
+}
+
+/**
+ * Deep-scan recursivo: procura qualquer campo cuja chave bata em
+ * /queryParams|searchParams|attribution|tracking|utm/i no payload todo.
+ * Cobre Engaged aninhar a atribuicao em campos imprevisiveis.
+ */
+const ATTR_KEY_RE = /^(query_?params|search_?params|attribution|tracking|utms?)$/i;
+function deepFindAttributionSources(value: unknown, out: Record<string, string>, depth = 0): void {
+  if (depth > 6 || value == null) return;
+  if (Array.isArray(value)) {
+    for (const item of value) deepFindAttributionSources(item, out, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+  const obj = value as Record<string, unknown>;
+  for (const [k, v] of Object.entries(obj)) {
+    if (ATTR_KEY_RE.test(k)) mergeQuerySource(out, v);
+  }
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === "object") deepFindAttributionSources(v, out, depth + 1);
+  }
+}
+
+/**
+ * Coleta atribuicao de multiplas fontes (primeira fonte vence):
+ *   1. p.queryParams (objeto, string "k=v&k=v", ou URL completa)
+ *   2. p.utm consolidado
+ *   3. top-level utm_source/medium/campaign
+ *   4. p.referrer
+ *   5. deep-scan recursivo (campos imprevisiveis aninhados)
  */
 function pickAttribution(p: Parsed): Record<string, string> | null {
   const out: Record<string, string> = {};
-  // 1) queryParams — TUDO que veio na URL pro Engaged (UTMs + cupom + custom)
-  const q = (p.queryParams || {}) as Record<string, unknown>;
-  for (const [k, v] of Object.entries(q)) {
-    if (typeof v === "string" && v.trim().length > 0) out[k] = v.trim();
-    else if (typeof v === "number") out[k] = String(v);
-  }
-  // 2) Objeto utm — fallback se queryParams nao trouxe
+  mergeQuerySource(out, p.queryParams as unknown);
   const utm = p.utm || {};
   if (utm.source && !out.utm_source) out.utm_source = utm.source;
   if (utm.medium && !out.utm_medium) out.utm_medium = utm.medium;
   if (utm.campaign && !out.utm_campaign) out.utm_campaign = utm.campaign;
   if (utm.content && !out.utm_content) out.utm_content = utm.content;
   if (utm.term && !out.utm_term) out.utm_term = utm.term;
-  // 3) Top-level utm_* — ultimo fallback
   if (p.utm_source && !out.utm_source) out.utm_source = p.utm_source;
   if (p.utm_medium && !out.utm_medium) out.utm_medium = p.utm_medium;
   if (p.utm_campaign && !out.utm_campaign) out.utm_campaign = p.utm_campaign;
+  const referrer = (p as unknown as { referrer?: unknown }).referrer;
+  if (typeof referrer === "string" && referrer.trim() && !out.referrer) {
+    out.referrer = referrer.trim().slice(0, 500);
+  }
+  deepFindAttributionSources(p, out);
   return Object.keys(out).length > 0 ? out : null;
 }
 
