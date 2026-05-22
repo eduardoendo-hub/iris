@@ -16,9 +16,21 @@ export default async function AccessPage() {
   const role = (session.user as { role?: string }).role;
   if (role !== "ADMIN") redirect("/admin");
 
-  const [emails, domains] = await Promise.all([
-    prisma.allowedEmail.findMany({ orderBy: { addedAt: "desc" } }),
+  const [emails, domains, campaigns] = await Promise.all([
+    prisma.allowedEmail.findMany({
+      orderBy: { addedAt: "desc" },
+      include: {
+        allowedCampaigns: {
+          select: { campaignSlug: true },
+          orderBy: { campaignSlug: "asc" },
+        },
+      },
+    }),
     prisma.allowedDomain.findMany({ orderBy: { addedAt: "desc" } }),
+    prisma.campaign.findMany({
+      orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
+      select: { slug: true, name: true, productSlug: true, isActive: true },
+    }),
   ]);
 
   return (
@@ -71,6 +83,8 @@ export default async function AccessPage() {
         <p style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.5 }}>
           Cadastre emails individuais (ex: contas Gmail pessoais) ou domínios inteiros (ex:{" "}
           <code>impacta.com.br</code>) autorizados a logar no IRIS via Google OAuth.
+          Para emails, é possível restringir a quais campanhas o usuário tem acesso.
+          Sem nenhuma campanha selecionada → vê todas (admin).
         </p>
 
         <AccessManager
@@ -79,12 +93,19 @@ export default async function AccessPage() {
             email: e.email,
             note: e.note,
             addedAt: e.addedAt.toISOString(),
+            campaignSlugs: e.allowedCampaigns.map((c) => c.campaignSlug),
           }))}
           initialDomains={domains.map((d) => ({
             id: d.id,
             domain: d.domain,
             note: d.note,
             addedAt: d.addedAt.toISOString(),
+          }))}
+          allCampaigns={campaigns.map((c) => ({
+            slug: c.slug,
+            name: c.name,
+            productSlug: c.productSlug,
+            isActive: c.isActive,
           }))}
         />
       </main>

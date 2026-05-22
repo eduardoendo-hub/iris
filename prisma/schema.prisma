@@ -79,6 +79,9 @@ model Campaign {
 
   @@index([productSlug, isActive])
   @@index([startDate])
+
+  // Acesso por campanha — back-relation
+  allowedEmails AllowedEmailCampaign[]
 }
 
 // ============================================================
@@ -93,6 +96,28 @@ model AllowedEmail {
   note          String?
   addedAt       DateTime @default(now())
   addedByUserId String?
+
+  // Campanhas que esse email pode ver. Vazio = acesso a todas (admin/full).
+  // Com 1+ entradas = restrito apenas as listadas.
+  allowedCampaigns AllowedEmailCampaign[]
+}
+
+// Juncao many-to-many AllowedEmail x Campaign. Cada linha = uma campanha
+// que esse email tem direito de ver no cockpit. Cascata: se a campanha
+// for deletada, as permissoes viram lixo automaticamente; idem se o
+// AllowedEmail for removido.
+model AllowedEmailCampaign {
+  id              String   @id @default(cuid())
+  allowedEmailId  String
+  campaignSlug    String
+  createdAt       DateTime @default(now())
+
+  allowedEmail AllowedEmail @relation(fields: [allowedEmailId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignSlug], references: [slug], onDelete: Cascade)
+
+  @@unique([allowedEmailId, campaignSlug])
+  @@index([allowedEmailId])
+  @@index([campaignSlug])
 }
 
 model AllowedDomain {

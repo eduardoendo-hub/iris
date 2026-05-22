@@ -1,4 +1,7 @@
 import Image from "next/image";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { getAccessScope, filterCampaignsByScope } from "@/lib/access";
 import { Topbar } from "@/components/Topbar";
 import { CampaignSelector, type CampaignOption } from "@/components/CampaignSelector";
 import { TabNav } from "@/components/TabNav";
@@ -40,22 +43,44 @@ export default async function CockpitPage({
 }) {
   const params = await searchParams;
 
-  // Lista TODAS as campanhas pro combo. Se nenhuma cadastrada, fallback
-  // pros produtos mock (legado, primeira vez sem nada no DB).
+  // Sessao + escopo de acesso (campanhas que o usuario pode ver).
+  // Se nao logado, NextAuth ja redireciona via middleware/page guards. Aqui
+  // chega so quando ha sessao valida; mas blindamos por seguranca.
+  const session = await auth();
+  const userEmail = (session?.user?.email as string | undefined) ?? null;
+  const accessScope = await getAccessScope(userEmail);
+
+  // Lista TODAS as campanhas pro combo, depois filtra pelo escopo do user.
+  // Se nenhuma cadastrada, fallback pros produtos mock (legado).
   let campaignOptions: CampaignOption[] = [];
   try {
     const all = await prisma.campaign.findMany({
       orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
       select: { slug: true, name: true, productSlug: true, isActive: true },
     });
-    campaignOptions = all.map((c) => ({
-      slug: c.slug,
-      name: c.name,
-      productSlug: c.productSlug,
-      isActive: c.isActive,
-    }));
+    campaignOptions = filterCampaignsByScope(
+      all.map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        productSlug: c.productSlug,
+        isActive: c.isActive,
+      })),
+      accessScope,
+    );
   } catch {
     // Tabela Campaign nao existe ainda
+  }
+
+  // Se o user pediu uma campanha que ele NAO pode ver via ?campaign=<slug>,
+  // redireciona para a 1a campanha que ele pode ver. Se nao tem nenhuma,
+  // deixa cair na renderizacao "sem campanhas" mais abaixo.
+  if (params.campaign && accessScope.scope === "restricted") {
+    const canSee = campaignOptions.some((c) => c.slug === params.campaign);
+    if (!canSee) {
+      const firstAllowed = campaignOptions[0];
+      if (firstAllowed) redirect(`/?campaign=${firstAllowed.slug}`);
+      else redirect("/?denied=1");
+    }
   }
 
   // Decide qual campanha exibir:
