@@ -47,7 +47,9 @@ export async function POST(req: NextRequest) {
   for (const slug of slugs) {
     try {
       const result = await ingestGoogleAds({ productSlug: slug, days });
-      results.push({ productSlug: slug, ...result });
+      // productSlug por ultimo: garante que o slug do loop sobrescreve qualquer
+      // valor que o `result` traga (evita TS "specified more than once" warning).
+      results.push({ ...result, productSlug: slug });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const code =
