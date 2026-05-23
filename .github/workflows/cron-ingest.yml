@@ -17,7 +17,7 @@ on:
 
 jobs:
   ga4:
-    name: GA4 ingest (claude-pro)
+    name: GA4 ingest (all products)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: ${{ github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch' }}
@@ -25,14 +25,14 @@ jobs:
       - name: POST /api/cron/ga4
         run: |
           curl --fail-with-body --silent --show-error \
-            -X POST "https://iris.technowhub.ai/api/cron/ga4?product=claude-pro&days=7" \
+            -X POST "https://iris.technowhub.ai/api/cron/ga4?product=all&days=7" \
             -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}" \
             -H "User-Agent: github-actions-cron-iris" \
             -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"
         continue-on-error: true # GA4 cred opcional (modo Plano C dispensa)
 
   meta-ads:
-    name: Meta Ads ingest (claude-pro)
+    name: Meta Ads ingest (all products)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: ${{ github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch' }}
@@ -40,14 +40,14 @@ jobs:
       - name: POST /api/cron/meta-ads
         run: |
           curl --fail-with-body --silent --show-error \
-            -X POST "https://iris.technowhub.ai/api/cron/meta-ads?product=claude-pro&days=7" \
+            -X POST "https://iris.technowhub.ai/api/cron/meta-ads?product=all&days=7" \
             -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}" \
             -H "User-Agent: github-actions-cron-iris" \
             -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"
         continue-on-error: true # Meta cred opcional ate o user setar
 
   google-ads:
-    name: Google Ads ingest (claude-pro)
+    name: Google Ads ingest (all products)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: ${{ github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch' }}
@@ -55,7 +55,7 @@ jobs:
       - name: POST /api/cron/google-ads
         run: |
           curl --fail-with-body --silent --show-error \
-            -X POST "https://iris.technowhub.ai/api/cron/google-ads?product=claude-pro&days=7" \
+            -X POST "https://iris.technowhub.ai/api/cron/google-ads?product=all&days=7" \
             -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}" \
             -H "User-Agent: github-actions-cron-iris" \
             -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"

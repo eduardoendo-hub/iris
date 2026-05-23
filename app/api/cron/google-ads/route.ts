@@ -16,6 +16,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { ingestGoogleAds } from "@/lib/ingest/google-ads";
+import { listProductSlugs } from "@/lib/products";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,21 +34,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const url = new URL(req.url);
-  const productSlug = url.searchParams.get("product") || "claude-pro";
+  const productParam = url.searchParams.get("product") || "claude-pro";
   const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "7", 10), 1), 30);
 
-  try {
-    const result = await ingestGoogleAds({ productSlug, days });
-    return NextResponse.json({ status: "ok", ...result });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const code =
-      msg.includes("not configured") ||
-      msg.includes("nao configurada")
-        ? 422
-        : 500;
-    return NextResponse.json({ error: "ingest_failed", message: msg }, { status: code });
+  // ?product=all → itera sobre todos os produtos cadastrados em lib/products.ts.
+  // Caso contrario, ingere apenas o produto solicitado (legado).
+  const slugs = productParam === "all" ? listProductSlugs() : [productParam];
+
+  const results: Array<{ productSlug: string; [k: string]: unknown }> = [];
+  const errors: Array<{ productSlug: string; error: string; code: number }> = [];
+
+  for (const slug of slugs) {
+    try {
+      const result = await ingestGoogleAds({ productSlug: slug, days });
+      results.push({ productSlug: slug, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const code =
+        msg.includes("not configured") || msg.includes("nao configurada") ? 422 : 500;
+      errors.push({ productSlug: slug, error: msg, code });
+    }
   }
+
+  const allFailed = errors.length === slugs.length && slugs.length > 0;
+  const status = errors.length === 0 ? "ok" : allFailed ? "all_failed" : "partial";
+  // Quando todas falham, devolve o codigo do primeiro erro pra cron reportar
+  // failure no GitHub Actions; senao devolve 200 (parcial conta como sucesso).
+  const httpCode = allFailed ? errors[0].code : 200;
+
+  return NextResponse.json(
+    {
+      status,
+      productsRequested: slugs,
+      results,
+      errors: errors.length ? errors : undefined,
+    },
+    { status: httpCode },
+  );
 }
 
 export async function GET(req: NextRequest) {

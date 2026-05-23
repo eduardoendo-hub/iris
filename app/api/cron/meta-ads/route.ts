@@ -10,6 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { ingestMetaAds } from "@/lib/ingest/meta-ads";
+import { listProductSlugs } from "@/lib/products";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,21 +28,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const url = new URL(req.url);
-  const productSlug = url.searchParams.get("product") || "claude-pro";
+  const productParam = url.searchParams.get("product") || "claude-pro";
   const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "7", 10), 1), 30);
 
-  try {
-    const result = await ingestMetaAds({ productSlug, days });
-    return NextResponse.json({ status: "ok", ...result });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const code =
-      msg.includes("not configured") ||
-      msg.includes("nao configurada")
-        ? 422
-        : 500;
-    return NextResponse.json({ error: "ingest_failed", message: msg }, { status: code });
+  // ?product=all → itera sobre todos os produtos cadastrados em lib/products.ts.
+  const slugs = productParam === "all" ? listProductSlugs() : [productParam];
+
+  const results: Array<{ productSlug: string; [k: string]: unknown }> = [];
+  const errors: Array<{ productSlug: string; error: string; code: number }> = [];
+
+  for (const slug of slugs) {
+    try {
+      const result = await ingestMetaAds({ productSlug: slug, days });
+      results.push({ productSlug: slug, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const code =
+        msg.includes("not configured") || msg.includes("nao configurada") ? 422 : 500;
+      errors.push({ productSlug: slug, error: msg, code });
+    }
   }
+
+  const allFailed = errors.length === slugs.length && slugs.length > 0;
+  const status = errors.length === 0 ? "ok" : allFailed ? "all_failed" : "partial";
+  const httpCode = allFailed ? errors[0].code : 200;
+
+  return NextResponse.json(
+    {
+      status,
+      productsRequested: slugs,
+      results,
+      errors: errors.length ? errors : undefined,
+    },
+    { status: httpCode },
+  );
 }
 
 // GET pra debug rapido (mesmo auth)
