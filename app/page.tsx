@@ -349,10 +349,24 @@ export default async function CockpitPage({
     const phones = raw.map((s) => s.customerPhone).filter((p): p is string => !!p);
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - 90);
-    let leadsLookup: Awaited<ReturnType<typeof prisma.lead.findMany>> = [];
+    // Tipa pelo shape do select (nao pelo Lead full) — eventType vira string
+    // pra bater com o relatedLead da Sale (que evita acoplar com LeadEvent enum).
+    type LeadLookupRow = {
+      email: string | null;
+      phone: string | null;
+      sourcePage: string | null;
+      utmSource: string | null;
+      utmMedium: string | null;
+      utmCampaign: string | null;
+      utmContent: string | null;
+      utmTerm: string | null;
+      eventType: string;
+      capturedAt: Date;
+    };
+    let leadsLookup: LeadLookupRow[] = [];
     if (emails.length || phones.length) {
       try {
-        leadsLookup = await prisma.lead.findMany({
+        const rows = await prisma.lead.findMany({
           where: {
             productSlug: slug,
             capturedAt: { gte: since },
@@ -369,6 +383,8 @@ export default async function CockpitPage({
             eventType: true, capturedAt: true,
           },
         });
+        // Cast da enum LeadEvent → string sem perder o valor
+        leadsLookup = rows.map((r) => ({ ...r, eventType: String(r.eventType) }));
       } catch {
         /* Lead table inexistente ou erro — segue sem enriquecimento */
       }
