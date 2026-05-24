@@ -18,6 +18,20 @@ type SaleRow = {
    *  Pra ENGAGED: vem do queryParams do webhook (URL clicada na LP).
    *  Mostrado em tooltip ao passar o mouse na origem. */
   attribution?: Record<string, string> | null;
+  /** Lead anterior do mesmo email/phone (whatsapp_click ou form_submit
+   *  capturado na LP). Fallback de origem quando attribution está vazia
+   *  — ex.: cliente colou URL direto no Engaged e Engaged não recebeu UTMs,
+   *  mas a pessoa havia clicado em WhatsApp antes vinda de Meta. */
+  relatedLead?: {
+    sourcePage: string | null;
+    utmSource: string | null;
+    utmMedium: string | null;
+    utmCampaign: string | null;
+    utmContent: string | null;
+    utmTerm: string | null;
+    eventType: string;
+    capturedAt: Date | string;
+  } | null;
 };
 
 /** Monta o texto do tooltip da coluna "Origem" a partir da attribution. */
@@ -253,15 +267,57 @@ export function SalesTable({
                       </td>
                       <td style={{ padding: "12px 16px" }}>
                         {(() => {
-                          const tooltip = buildAttributionTooltip(s.attribution);
                           const attr = s.attribution ?? {};
-                          // Mostra "canal · campanha" abaixo do badge quando ENGAGED com attribution
+                          const hasAttrUtm = !!(attr.utm_source || attr.utm_medium || attr.utm_campaign);
+                          // Origem primaria: attribution do checkout (Engaged queryParams).
+                          // Fallback: Lead anterior (whatsapp_click / form_submit) do mesmo email/phone.
                           const channel = attr.utm_source && attr.utm_medium
                             ? `${attr.utm_source} / ${attr.utm_medium}`
                             : attr.utm_source || null;
                           const camp = attr.utm_campaign || null;
+
+                          // Fallback do Lead quando attribution esta vazia
+                          const lead = s.relatedLead ?? null;
+                          const leadChannel = lead?.utmSource && lead.utmMedium
+                            ? `${lead.utmSource} / ${lead.utmMedium}`
+                            : lead?.utmSource || null;
+                          const leadCamp = lead?.utmCampaign || null;
+                          const leadHasUtm = !!(leadChannel || leadCamp);
+                          const leadDate = lead
+                            ? new Intl.DateTimeFormat("pt-BR", {
+                                day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo",
+                              }).format(typeof lead.capturedAt === "string" ? new Date(lead.capturedAt) : lead.capturedAt)
+                            : null;
+
+                          // Tooltip principal: tudo que sabemos de origem
+                          const tip = buildAttributionTooltip(s.attribution) || (
+                            lead ? [
+                              `Lead anterior: ${lead.eventType}${leadDate ? ` em ${leadDate}` : ""}`,
+                              leadChannel ? `Canal: ${leadChannel}` : null,
+                              leadCamp ? `Campanha: ${leadCamp}` : null,
+                              lead.utmContent ? `Anúncio: ${lead.utmContent}` : null,
+                              lead.sourcePage ? `Origem: ${lead.sourcePage.slice(0, 80)}` : null,
+                            ].filter(Boolean).join("\n") : null
+                          );
+
+                          // Decide o subtitle exibido abaixo do badge
+                          let subtitle: React.ReactNode = null;
+                          let subtitleColor = "var(--fg2)";
+                          if (hasAttrUtm && (channel || camp)) {
+                            subtitle = `${channel ?? ""}${channel && camp ? " · " : ""}${camp ?? ""}`;
+                          } else if (leadHasUtm) {
+                            subtitle = `via lead · ${leadChannel ?? ""}${leadChannel && leadCamp ? " · " : ""}${leadCamp ?? ""}`;
+                            subtitleColor = "#0ABAB5";
+                          } else if (lead?.sourcePage) {
+                            subtitle = `via lead (${lead.eventType.toLowerCase()})`;
+                            subtitleColor = "#0ABAB5";
+                          } else if (src.label === "Engaged") {
+                            subtitle = "sem origem · provavelmente organic";
+                            subtitleColor = "#D97757";
+                          }
+
                           return (
-                            <div className="flex flex-col gap-1" title={tooltip ?? undefined}>
+                            <div className="flex flex-col gap-1" title={tip ?? undefined}>
                               <span
                                 style={{
                                   display: "inline-flex",
@@ -275,25 +331,23 @@ export function SalesTable({
                                   fontWeight: 700,
                                   textTransform: "uppercase",
                                   letterSpacing: "0.05em",
-                                  cursor: tooltip ? "help" : "default",
+                                  cursor: tip ? "help" : "default",
                                   width: "fit-content",
                                 }}
                               >
                                 {src.icon}
                                 {src.label}
                               </span>
-                              {(channel || camp) && (
+                              {subtitle && (
                                 <span
                                   style={{
                                     fontSize: 10,
-                                    color: "var(--fg2)",
+                                    color: subtitleColor,
                                     fontFamily: "var(--font-mono)",
                                     lineHeight: 1.2,
                                   }}
                                 >
-                                  {channel ?? ""}
-                                  {channel && camp ? " · " : ""}
-                                  {camp ?? ""}
+                                  {subtitle}
                                 </span>
                               )}
                             </div>

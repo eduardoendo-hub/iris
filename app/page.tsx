@@ -298,6 +298,21 @@ export default async function CockpitPage({
     amount: number; currency: string; notes: string | null;
     saleDate: Date;
     attribution: Record<string, string> | null;
+    /** Lead anterior do mesmo email/phone — fallback de origem quando o
+     *  webhook do Engaged chega sem queryParams (cliente colou URL direto,
+     *  veio de tráfego orgânico, etc.). Permite identificar a venda como
+     *  "via WhatsApp click vindo do Meta há 3 dias" mesmo sem UTM no
+     *  checkout. */
+    relatedLead: {
+      sourcePage: string | null;
+      utmSource: string | null;
+      utmMedium: string | null;
+      utmCampaign: string | null;
+      utmContent: string | null;
+      utmTerm: string | null;
+      eventType: string;
+      capturedAt: Date;
+    } | null;
   }> = [];
   try {
     const agg = await prisma.sale.aggregate({
@@ -325,14 +340,77 @@ export default async function CockpitPage({
       orderBy: { saleDate: "desc" },
       take: 50,
     });
-    sales = raw.map((s) => ({
-      id: s.id, source: s.source,
-      customerName: s.customerName,
-      customerEmail: s.customerEmail, customerPhone: s.customerPhone,
-      amount: Number(s.amount), currency: s.currency,
-      notes: s.notes, saleDate: s.saleDate,
-      attribution: (s.attribution as Record<string, string> | null) ?? null,
-    }));
+
+    // Enriquece com Lead anterior (mesmo email/phone, ate 90 dias atras).
+    // Quando o Engaged nao envia queryParams (acesso organic/direct ao checkout),
+    // ainda dá pra ver a origem se o cliente clicou em WhatsApp ou submeteu
+    // formulario antes — esses Leads guardam sourcePage + UTM.
+    const emails = raw.map((s) => s.customerEmail).filter((e): e is string => !!e);
+    const phones = raw.map((s) => s.customerPhone).filter((p): p is string => !!p);
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 90);
+    let leadsLookup: Awaited<ReturnType<typeof prisma.lead.findMany>> = [];
+    if (emails.length || phones.length) {
+      try {
+        leadsLookup = await prisma.lead.findMany({
+          where: {
+            productSlug: slug,
+            capturedAt: { gte: since },
+            OR: [
+              ...(emails.length ? [{ email: { in: emails } }] : []),
+              ...(phones.length ? [{ phone: { in: phones } }] : []),
+            ],
+          },
+          orderBy: { capturedAt: "desc" },
+          select: {
+            email: true, phone: true, sourcePage: true,
+            utmSource: true, utmMedium: true, utmCampaign: true,
+            utmContent: true, utmTerm: true,
+            eventType: true, capturedAt: true,
+          },
+        });
+      } catch {
+        /* Lead table inexistente ou erro — segue sem enriquecimento */
+      }
+    }
+    // Index Leads por email/phone — usa o MAIS RECENTE (orderBy desc), e
+    // de preferencia o que tem UTM source preenchido (lead "rico"). Se houver
+    // multiplos pro mesmo email, prioriza o que tem utmSource nao-null.
+    const leadByKey = new Map<string, (typeof leadsLookup)[number]>();
+    for (const l of leadsLookup) {
+      for (const k of [l.email, l.phone].filter((v): v is string => !!v)) {
+        const prev = leadByKey.get(k);
+        if (!prev) leadByKey.set(k, l);
+        else if (!prev.utmSource && l.utmSource) leadByKey.set(k, l);
+      }
+    }
+
+    sales = raw.map((s) => {
+      const lead =
+        (s.customerEmail && leadByKey.get(s.customerEmail)) ||
+        (s.customerPhone && leadByKey.get(s.customerPhone)) ||
+        null;
+      return {
+        id: s.id, source: s.source,
+        customerName: s.customerName,
+        customerEmail: s.customerEmail, customerPhone: s.customerPhone,
+        amount: Number(s.amount), currency: s.currency,
+        notes: s.notes, saleDate: s.saleDate,
+        attribution: (s.attribution as Record<string, string> | null) ?? null,
+        relatedLead: lead
+          ? {
+              sourcePage: lead.sourcePage,
+              utmSource: lead.utmSource,
+              utmMedium: lead.utmMedium,
+              utmCampaign: lead.utmCampaign,
+              utmContent: lead.utmContent,
+              utmTerm: lead.utmTerm,
+              eventType: lead.eventType,
+              capturedAt: lead.capturedAt,
+            }
+          : null,
+      };
+    });
   } catch {
     // tabela Sale nao existe ainda
   }
