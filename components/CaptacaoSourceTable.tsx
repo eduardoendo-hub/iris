@@ -22,6 +22,10 @@ type Row = {
   utmMedium: string | null;
   utmCampaign: string | null;
   utmContent: string | null;
+  /** utm_term — palavra-chave (Google: {keyword}; Meta: geralmente
+   *  {adset.name}). Quando presente, exibido como label principal do
+   *  sub-row de anúncio. */
+  utmTerm?: string | null;
   visits: number;
   clickCompra: number;
   clickConsultor: number;
@@ -234,20 +238,53 @@ export function CaptacaoSourceTable({
                       <td
                         className="px-5 py-2"
                         style={{
-                          color: "var(--fg1)",
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 11,
-                          maxWidth: 320,
+                          maxWidth: 360,
                           overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
                           paddingLeft: 28,
                         }}
-                        title={ad.utmContent || ""}
+                        title={[
+                          ad.utmTerm ? `keyword: ${ad.utmTerm}` : null,
+                          ad.utmContent ? `content: ${ad.utmContent}` : null,
+                        ].filter(Boolean).join("\n") || ""}
                       >
-                        {ad.utmContent || (
-                          <span style={{ color: "var(--fg2)" }}>(sem utm_content)</span>
-                        )}
+                        {(() => {
+                          // utmContent eh ID puro (so digitos + underscore + hifen)?
+                          // Se sim e tem utmTerm, exibe term (humano) como
+                          // principal e content (ID) como sub-label cinza.
+                          const isIdish = ad.utmContent && /^[\d_-]+$/.test(ad.utmContent);
+                          const primary = (ad.utmTerm && isIdish)
+                            ? ad.utmTerm
+                            : ad.utmContent || ad.utmTerm || null;
+                          const secondary = (ad.utmTerm && isIdish)
+                            ? ad.utmContent
+                            : (ad.utmTerm && primary !== ad.utmTerm ? ad.utmTerm : null);
+                          return (
+                            <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <div style={{
+                                color: "var(--fg1)",
+                                fontFamily: "var(--font-mono)",
+                                fontSize: 11,
+                                fontWeight: primary ? 500 : 400,
+                              }}>
+                                {primary ?? (
+                                  <span style={{ color: "var(--fg2)" }}>(sem utm_content/term)</span>
+                                )}
+                              </div>
+                              {secondary && (
+                                <div style={{
+                                  fontSize: 10,
+                                  color: "var(--fg2)",
+                                  fontFamily: "var(--font-mono)",
+                                  marginTop: 2,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}>
+                                  {secondary}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-5 py-2"></td>
                       <td

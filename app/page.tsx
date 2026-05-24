@@ -464,14 +464,16 @@ export default async function CockpitPage({
   // ────────────────────────────────────────────────────────────────
   // Detalhamento de captação por canal (UTM) — toda a campanha
   // Agrega VisitEvent (cada evento da LP) por (utmSource, utmMedium,
-  // utmCampaign, utmContent). utmContent carrega o nome do anuncio
-  // (Meta substitui {{ad.name}} automaticamente) — permite ver qual peca
-  // ta performando melhor dentro de cada campanha.
+  // utmCampaign, utmContent, utmTerm). utmContent carrega o nome/ID do
+  // anuncio (Meta substitui {{ad.name}}; Google geralmente põe IDs como
+  // {adgroupid}_{creative}). utmTerm carrega a keyword no Google
+  // ({keyword}) — pra anúncios Search é o que o usuário pesquisou.
   type CaptacaoRow = {
     utmSource: string | null;
     utmMedium: string | null;
     utmCampaign: string | null;
     utmContent: string | null;
+    utmTerm: string | null;
     visits: number;
     clickCompra: number;
     clickConsultor: number;
@@ -482,15 +484,17 @@ export default async function CockpitPage({
   try {
     const from = captacaoFromUTC;
     const grouped = await prisma.visitEvent.groupBy({
-      by: ["utmSource", "utmMedium", "utmCampaign", "utmContent", "eventName"],
+      by: ["utmSource", "utmMedium", "utmCampaign", "utmContent", "utmTerm", "eventName"],
       where: { productSlug: slug, ts: { gte: from } },
       _count: { _all: true },
     });
     const pivot = new Map<string, CaptacaoRow>();
-    const key = (s: string | null, m: string | null, c: string | null, ct: string | null) =>
-      `${s ?? ""}|${m ?? ""}|${c ?? ""}|${ct ?? ""}`;
+    const key = (
+      s: string | null, m: string | null, c: string | null,
+      ct: string | null, t: string | null,
+    ) => `${s ?? ""}|${m ?? ""}|${c ?? ""}|${ct ?? ""}|${t ?? ""}`;
     for (const r of grouped) {
-      const k = key(r.utmSource, r.utmMedium, r.utmCampaign, r.utmContent);
+      const k = key(r.utmSource, r.utmMedium, r.utmCampaign, r.utmContent, r.utmTerm);
       let cur = pivot.get(k);
       if (!cur) {
         cur = {
@@ -498,6 +502,7 @@ export default async function CockpitPage({
           utmMedium: r.utmMedium,
           utmCampaign: r.utmCampaign,
           utmContent: r.utmContent,
+          utmTerm: r.utmTerm,
           visits: 0,
           clickCompra: 0,
           clickConsultor: 0,
