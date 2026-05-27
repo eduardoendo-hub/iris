@@ -77,6 +77,13 @@ export const MOCK_CHANNELS = {
     { channel: "(direct) / (none)",   cost: null, sessions: 0, ctaClicks: 0, cpc: null },
     { channel: "google / organic",    cost: null, sessions: 0, ctaClicks: 0, cpc: null },
   ],
+  "codigozero": [
+    // Aguardando dado real — cockpit já substitui via MetricSample.
+    { channel: "google / cpc",        cost: 0, sessions: 0, ctaClicks: 0, cpc: null },
+    { channel: "meta / cpc",          cost: 0, sessions: 0, ctaClicks: 0, cpc: null },
+    { channel: "(direct) / (none)",   cost: null, sessions: 0, ctaClicks: 0, cpc: null },
+    { channel: "google / organic",    cost: null, sessions: 0, ctaClicks: 0, cpc: null },
+  ],
 } as const;
 
 export const MOCK_CTA_POSITION = {
@@ -95,6 +102,13 @@ export const MOCK_CTA_POSITION = {
     { position: "footer", clicks: 3  },
   ],
   "claude-pro": [
+    { position: "hero",   clicks: 0 },
+    { position: "final",  clicks: 0 },
+    { position: "header", clicks: 0 },
+    { position: "info",   clicks: 0 },
+    { position: "footer", clicks: 0 },
+  ],
+  "codigozero": [
     { position: "hero",   clicks: 0 },
     { position: "final",  clicks: 0 },
     { position: "header", clicks: 0 },
