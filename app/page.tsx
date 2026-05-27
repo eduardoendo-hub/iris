@@ -117,6 +117,9 @@ export default async function CockpitPage({
   let mediaInvestment =
     (kpi as { mediaInvestment?: number }).mediaInvestment ?? kpi.cost ?? 0;
   let mediaInvestmentMonth = 0;
+  // true quando o card está exibindo o acumulado do mês em vez do spend
+  // de hoje (porque hoje deu 0 mas o mês tem investimento real).
+  let mediaInvestmentIsMonth = false;
   let metricsSourceLabel = "mock";
   try {
     // Computa boundaries em SP — bucket startsAt agora salva "Day X 00:00 SP"
@@ -183,6 +186,16 @@ export default async function CockpitPage({
       (acc, s) => acc + Number(s._sum.value ?? 0),
       0
     );
+
+    // FALLBACK: quando o spend de HOJE é 0 (deploy recém-rodado, cron
+    // ainda não pegou, dia em pausa), o card de Investimento ficava
+    // mostrando o mock (0). Se o mês acumulado > 0, mostra ele — é
+    // melhor ver o gasto real da campanha do que R$ 0 falso.
+    // mediaInvestmentIsMonth marca pra hint do card refletir corretamente.
+    if (spendTodayTotal === 0 && mediaInvestmentMonth > 0) {
+      mediaInvestment = mediaInvestmentMonth;
+      mediaInvestmentIsMonth = true;
+    }
   } catch {
     // tabela MetricSample nao existe ainda — segue com mocks
   }
@@ -907,7 +920,7 @@ export default async function CockpitPage({
               value={mediaInvestment}
               format="currency"
               icon={<WalletIcon size={14} />}
-              hint="hoje · Meta + Google"
+              hint={mediaInvestmentIsMonth ? "mês a data · Meta + Google" : "hoje · Meta + Google"}
               secondaryValue={totalInvestmentMonth}
               secondaryLabel="no mês"
               secondaryHint={

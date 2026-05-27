@@ -39,6 +39,22 @@ export const MOCK_KPIS = {
     ctr: 0,           ctrDelta: null,
     cost: 0,          costDelta: null,
   },
+  // Código Zero — campanha junho/2026. Mesma estrutura do claude-pro: tudo
+  // zerado, dashboard preenche com dado real do MetricSample (ingestão Meta
+  // + Google Ads via /api/cron/* a cada 15min). Sem essa entrada o fallback
+  // ia em claude-pro e o card de Investimento dava R$0 quando o spend de
+  // HOJE era 0 (mesmo tendo R$465+ acumulado). Reported 27/05/2026.
+  "codigozero": {
+    visitsLP:        0,
+    clicksCompra:    0,
+    clicksWhats:     0,
+    clicksConsultor: 0,
+    mediaInvestment: 0,
+    sessions: 0,      sessionsDelta: null,
+    ctaClicks: 0,     ctaClicksDelta: null,
+    ctr: 0,           ctrDelta: null,
+    cost: 0,          costDelta: null,
+  },
 } as const;
 
 export const MOCK_CHANNELS = {
