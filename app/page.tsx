@@ -211,16 +211,18 @@ export default async function CockpitPage({
     // DB nao disponivel — segue com lista vazia
   }
 
-  // Leads do Engaged — status != PAID E que NAO tenham Sale ou outra
-  // EngagedPurchase=PAID com o mesmo email/telefone (dedupe defensivo,
-  // pq Engaged manda _id diferente por evento → pode criar 2 linhas pro
-  // mesmo cliente: uma DRAFT e outra PAID). Tabela so deve mostrar quem
-  // realmente nao pagou ainda.
+  // Leads UNIFICADOS — Engaged (status != PAID) + WhatsApp click do mesmo
+  // produto. Dedup: se a pessoa (email/phone) ja pagou (Sale ou
+  // EngagedPurchase PAID), sai da lista. Se aparece em AMBOS Engaged e WA
+  // sem ter pago, prioriza Engaged (tem status mais rico). Cada row carrega
+  // o `kind` ('engaged'|'whatsapp') pra UI diferenciar visualmente e o
+  // `attribution` (UTMs) pra exibir origem.
   let engagedLeadsCount = 0;
   let engagedLeads: Array<{
     id: string;
+    kind: "engaged" | "whatsapp";
     externalId: string;
-    status: string;
+    status: string;            // engaged status OU "WHATSAPP_CLICK"
     lastEventType: string;
     customerName: string | null;
     customerEmail: string | null;
@@ -230,6 +232,10 @@ export default async function CockpitPage({
     eventAt: Date;
     firstSeenAt: Date;
     lastUpdatedAt: Date;
+    /** Origem: utm_source/medium/campaign/content/term. Pra ENGAGED vem
+     *  do attribution; pra WHATSAPP vem dos campos utm* do Lead. */
+    attribution: Record<string, string | null> | null;
+    sourcePage: string | null; // só pra WhatsApp (Lead.sourcePage)
   }> = [];
   try {
     // 1. Coleta TODOS os emails/telefones que ja pagaram (Sale + EngagedPurchase=PAID)
@@ -254,36 +260,117 @@ export default async function CockpitPage({
       if (p) paidPhones.add(p);
     }
 
-    // 2. Busca leads nao-pagos e filtra os que ja pagaram em outra linha
-    const raw = await prisma.engagedPurchase.findMany({
+    // 2. Engaged leads não-pagos
+    const rawEngaged = await prisma.engagedPurchase.findMany({
       where: { productSlug: slug, status: { not: "PAID" } },
       orderBy: { eventAt: "desc" },
-      take: 200, // sobra margem pra filtragem em app
+      take: 200,
     });
-    const filtered = raw.filter((r) => {
+    const engagedFiltered = rawEngaged.filter((r) => {
       const e = normEmail(r.customerEmail);
       const p = normPhone(r.customerPhone);
-      if (e && paidEmails.has(e)) return false; // ja pagou (sale ou engaged PAID)
+      if (e && paidEmails.has(e)) return false;
       if (p && paidPhones.has(p)) return false;
       return true;
     });
-    engagedLeadsCount = filtered.length;
-    engagedLeads = filtered.slice(0, 50).map((r) => ({
-      id: r.id,
-      externalId: r.externalId,
-      status: r.status,
-      lastEventType: r.lastEventType,
-      customerName: r.customerName,
-      customerEmail: r.customerEmail,
-      customerPhone: r.customerPhone,
-      amount: r.amount ? Number(r.amount) : null,
-      currency: r.currency,
-      eventAt: r.eventAt,
-      firstSeenAt: r.firstSeenAt,
-      lastUpdatedAt: r.lastUpdatedAt,
-    }));
+
+    // 3. WhatsApp click leads (mesmo produto). Ja vêm com utm fields preenchidos.
+    let rawWa: Awaited<ReturnType<typeof prisma.lead.findMany>> = [];
+    try {
+      rawWa = await prisma.lead.findMany({
+        where: { productSlug: slug, eventType: "WHATSAPP_CLICK" },
+        orderBy: { capturedAt: "desc" },
+        take: 200,
+      });
+    } catch { /* Lead table vazia ou erro — segue só com Engaged */ }
+
+    const waFiltered = rawWa.filter((r) => {
+      const e = normEmail(r.email);
+      const p = normPhone(r.phone);
+      if (e && paidEmails.has(e)) return false;
+      if (p && paidPhones.has(p)) return false;
+      return true;
+    });
+
+    // 4. Dedup entre Engaged e WhatsApp por email/phone: se o lead aparece
+    //    em ambos, prioriza Engaged (tem status mais rico). Index dos
+    //    emails/phones que ja entraram via Engaged.
+    const engagedKeys = new Set<string>();
+    for (const r of engagedFiltered) {
+      const e = normEmail(r.customerEmail);
+      const p = normPhone(r.customerPhone);
+      if (e) engagedKeys.add("e:" + e);
+      if (p) engagedKeys.add("p:" + p);
+    }
+
+    // 5. Normaliza ambos em rows unificadas
+    type Row = (typeof engagedLeads)[number];
+    const rows: Row[] = [];
+    for (const r of engagedFiltered) {
+      const attr = (r.attribution && typeof r.attribution === "object" && !Array.isArray(r.attribution))
+        ? (r.attribution as Record<string, string | null>)
+        : null;
+      rows.push({
+        id: r.id,
+        kind: "engaged",
+        externalId: r.externalId,
+        status: r.status,
+        lastEventType: r.lastEventType,
+        customerName: r.customerName,
+        customerEmail: r.customerEmail,
+        customerPhone: r.customerPhone,
+        amount: r.amount ? Number(r.amount) : null,
+        currency: r.currency,
+        eventAt: r.eventAt,
+        firstSeenAt: r.firstSeenAt,
+        lastUpdatedAt: r.lastUpdatedAt,
+        attribution: attr,
+        sourcePage: null,
+      });
+    }
+    for (const r of waFiltered) {
+      const e = normEmail(r.email);
+      const p = normPhone(r.phone);
+      if ((e && engagedKeys.has("e:" + e)) || (p && engagedKeys.has("p:" + p))) {
+        continue; // ja entrou via Engaged
+      }
+      const attr: Record<string, string | null> = {
+        utm_source: r.utmSource,
+        utm_medium: r.utmMedium,
+        utm_campaign: r.utmCampaign,
+        utm_content: r.utmContent,
+        utm_term: r.utmTerm,
+      };
+      rows.push({
+        id: r.id,
+        kind: "whatsapp",
+        externalId: r.id, // sem externalId pro WA — usa o id do Lead
+        status: "WHATSAPP_CLICK",
+        lastEventType: "lead.whatsapp_click",
+        customerName: r.name,
+        customerEmail: r.email,
+        customerPhone: r.phone,
+        amount: null,
+        currency: null,
+        eventAt: r.capturedAt,
+        firstSeenAt: r.capturedAt,
+        lastUpdatedAt: r.updatedAt,
+        attribution: attr,
+        sourcePage: r.sourcePage,
+      });
+    }
+
+    // 6. Ordena: mais recente primeiro
+    rows.sort((a, b) => {
+      const ta = a.eventAt instanceof Date ? a.eventAt.getTime() : new Date(a.eventAt).getTime();
+      const tb = b.eventAt instanceof Date ? b.eventAt.getTime() : new Date(b.eventAt).getTime();
+      return tb - ta;
+    });
+
+    engagedLeadsCount = rows.length;
+    engagedLeads = rows.slice(0, 100);
   } catch {
-    // tabela EngagedPurchase nao existe ainda (pre-migration)
+    // tabelas EngagedPurchase/Lead nao existem ainda (pre-migration)
   }
 
   // Vendas — total + breakdown por origem (Diretas/Consultor/Engaged) + detalhes

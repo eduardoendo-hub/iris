@@ -13,6 +13,8 @@
  */
 type Row = {
   id: string;
+  /** Tipo da fonte: engaged (checkout iniciou) ou whatsapp (clicou no WA da LP). */
+  kind?: "engaged" | "whatsapp";
   externalId: string;
   status: string;
   lastEventType: string;
@@ -24,6 +26,11 @@ type Row = {
   eventAt: Date | string;
   firstSeenAt: Date | string;
   lastUpdatedAt: Date | string;
+  /** UTMs (utm_source/medium/campaign/content/term). Engaged: vem do
+   *  queryParams do webhook. WhatsApp: vem dos campos utm* do Lead. */
+  attribution?: Record<string, string | null> | null;
+  /** URL da LP de origem — só preenchido pra WhatsApp Lead. */
+  sourcePage?: string | null;
 };
 
 type StatusStyle = { label: string; color: string; bg: string };
@@ -33,7 +40,40 @@ const STATUS_STYLE: Record<string, StatusStyle> = {
   CANCELED: { label: "Cancelado", color: "#EC6088", bg: "rgba(236,96,136,0.15)" },
   REFUSED: { label: "Recusado", color: "#EC6088", bg: "rgba(236,96,136,0.15)" },
   EXPIRED: { label: "Expirado", color: "#D97757", bg: "rgba(217,119,87,0.15)" },
+  WHATSAPP_CLICK: { label: "WhatsApp click", color: "#25D366", bg: "rgba(37,211,102,0.15)" },
 };
+
+/** Resumo legível das UTMs pra mostrar na coluna Origem. */
+function formatOrigem(
+  attr: Record<string, string | null> | null | undefined,
+  sourcePage: string | null | undefined,
+): { primary: string; secondary: string | null; tooltip: string } | null {
+  if (!attr || Object.values(attr).every((v) => !v)) {
+    // Sem UTM. Se tem sourcePage (WhatsApp), mostra ele.
+    if (sourcePage) {
+      let host: string;
+      try { host = new URL(sourcePage).hostname; } catch { host = sourcePage.slice(0, 40); }
+      return { primary: host, secondary: "sem UTM", tooltip: `sourcePage: ${sourcePage}` };
+    }
+    return null;
+  }
+  const src = attr.utm_source;
+  const med = attr.utm_medium;
+  const camp = attr.utm_campaign;
+  const cnt = attr.utm_content;
+  const term = attr.utm_term;
+  const channel = src && med ? `${src} / ${med}` : src || med || null;
+  const primary = channel || camp || "—";
+  const secondary = channel && camp ? camp : term || cnt || null;
+  const tooltipParts = [
+    channel ? `Canal: ${channel}` : null,
+    camp ? `Campanha: ${camp}` : null,
+    term ? `Keyword: ${term}` : null,
+    cnt ? `Anúncio: ${cnt}` : null,
+    sourcePage ? `Origem: ${sourcePage}` : null,
+  ].filter(Boolean) as string[];
+  return { primary, secondary, tooltip: tooltipParts.join("\n") };
+}
 
 function styleFor(status: string): StatusStyle {
   return STATUS_STYLE[status] ?? { label: status, color: "#9ABABA", bg: "rgba(154,186,186,0.10)" };
@@ -106,10 +146,10 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
               letterSpacing: "var(--ls-eyebrow)",
             }}
           >
-            Leads Engaged
+            Leads (Engaged / WhatsApp)
           </h3>
           <span style={{ fontSize: 11, color: "var(--fg2)", fontFamily: "var(--font-mono)" }}>
-            {totalCount} {totalCount === 1 ? "lead" : "leads"} (não pagos)
+            {totalCount} {totalCount === 1 ? "lead" : "leads"} (sem pagamento)
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -149,8 +189,10 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
               }}
             >
               <th className="text-left px-4 py-2">Data</th>
+              <th className="text-left px-4 py-2">Tipo</th>
               <th className="text-left px-4 py-2">Cliente</th>
               <th className="text-left px-4 py-2">Contato</th>
+              <th className="text-left px-4 py-2">Origem</th>
               <th className="text-right px-4 py-2">Valor</th>
               <th className="text-left px-4 py-2">Status</th>
             </tr>
@@ -158,14 +200,19 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
           <tbody>
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center px-4 py-6" style={{ color: "var(--fg2)" }}>
-                  Nenhum lead Engaged em status pré-venda. Compras pagas ficam no bloco de Vendas
-                  acima.
+                <td colSpan={7} className="text-center px-4 py-6" style={{ color: "var(--fg2)" }}>
+                  Nenhum lead Engaged ou WhatsApp em status pré-venda. Compras pagas ficam no bloco
+                  de Vendas acima.
                 </td>
               </tr>
             ) : (
               sorted.map((r) => {
                 const s = styleFor(r.status);
+                const kind = r.kind ?? "engaged";
+                const kindBadge = kind === "whatsapp"
+                  ? { label: "WHATS", color: "#25D366", bg: "rgba(37,211,102,0.15)" }
+                  : { label: "ENGAGED", color: "#30D158", bg: "rgba(48,209,88,0.15)" };
+                const origem = formatOrigem(r.attribution, r.sourcePage);
                 return (
                   <tr
                     key={r.id}
@@ -182,6 +229,23 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
                     >
                       {formatDate(r.eventAt)}
                     </td>
+                    <td className="px-4 py-2.5">
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          padding: "2px 6px",
+                          borderRadius: 3,
+                          background: kindBadge.bg,
+                          color: kindBadge.color,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {kindBadge.label}
+                      </span>
+                    </td>
                     <td
                       className="px-4 py-2.5"
                       style={{ color: "var(--fg1)", fontWeight: 600 }}
@@ -197,6 +261,28 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
                       )}
                       {!r.customerEmail && !r.customerPhone && (
                         <span style={{ color: "var(--fg2)" }}>—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5" style={{ fontSize: 11 }} title={origem?.tooltip}>
+                      {origem ? (
+                        <div style={{ cursor: "help" }}>
+                          <div style={{
+                            color: "var(--fg1)",
+                            fontFamily: "var(--font-mono)",
+                            fontWeight: 500,
+                          }}>
+                            {origem.primary}
+                          </div>
+                          {origem.secondary && (
+                            <div style={{ color: "var(--fg2)", fontSize: 10, marginTop: 2 }}>
+                              {origem.secondary}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: "#D97757", fontSize: 10, fontStyle: "italic" }}>
+                          sem origem
+                        </span>
                       )}
                     </td>
                     <td
