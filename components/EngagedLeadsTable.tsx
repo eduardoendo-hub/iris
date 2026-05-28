@@ -13,8 +13,9 @@
  */
 type Row = {
   id: string;
-  /** Tipo da fonte: engaged (checkout iniciou) ou whatsapp (clicou no WA da LP). */
-  kind?: "engaged" | "whatsapp";
+  /** Tipo da fonte: engaged (checkout iniciou), whatsapp (clicou/preencheu
+   *  barreira do WA), form (formulário "falar com consultor"). */
+  kind?: "engaged" | "whatsapp" | "form";
   externalId: string;
   status: string;
   lastEventType: string;
@@ -41,6 +42,8 @@ const STATUS_STYLE: Record<string, StatusStyle> = {
   REFUSED: { label: "Recusado", color: "#EC6088", bg: "rgba(236,96,136,0.15)" },
   EXPIRED: { label: "Expirado", color: "#D97757", bg: "rgba(217,119,87,0.15)" },
   WHATSAPP_CLICK: { label: "WhatsApp click", color: "#25D366", bg: "rgba(37,211,102,0.15)" },
+  WHATSAPP_LEAD: { label: "WhatsApp lead", color: "#25D366", bg: "rgba(37,211,102,0.15)" },
+  FORM_SUBMIT: { label: "Formulário", color: "#0ABAB5", bg: "rgba(10,186,181,0.15)" },
 };
 
 /** Resumo legível das UTMs pra mostrar na coluna Origem. */
@@ -209,9 +212,12 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
               sorted.map((r) => {
                 const s = styleFor(r.status);
                 const kind = r.kind ?? "engaged";
-                const kindBadge = kind === "whatsapp"
-                  ? { label: "WHATS", color: "#25D366", bg: "rgba(37,211,102,0.15)" }
-                  : { label: "ENGAGED", color: "#30D158", bg: "rgba(48,209,88,0.15)" };
+                const kindBadge =
+                  kind === "whatsapp"
+                    ? { label: "WHATS", color: "#25D366", bg: "rgba(37,211,102,0.15)" }
+                    : kind === "form"
+                    ? { label: "FORM", color: "#0ABAB5", bg: "rgba(10,186,181,0.15)" }
+                    : { label: "ENGAGED", color: "#30D158", bg: "rgba(48,209,88,0.15)" };
                 const origem = formatOrigem(r.attribution, r.sourcePage);
                 return (
                   <tr

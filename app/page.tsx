@@ -233,7 +233,7 @@ export default async function CockpitPage({
   let engagedLeadsCount = 0;
   let engagedLeads: Array<{
     id: string;
-    kind: "engaged" | "whatsapp";
+    kind: "engaged" | "whatsapp" | "form";
     externalId: string;
     status: string;            // engaged status OU "WHATSAPP_CLICK"
     lastEventType: string;
@@ -287,17 +287,32 @@ export default async function CockpitPage({
       return true;
     });
 
-    // 3. WhatsApp click leads (mesmo produto). Ja vêm com utm fields preenchidos.
+    // 3. Leads com CONTATO (mesmo produto). Inclui:
+    //    - WHATSAPP_CLICK que tenham nome/email/phone (raro — barreira)
+    //    - FORM_SUBMIT (consultor OU barreira do WhatsApp, ambos com dados)
+    //    EXCLUI os WHATSAPP_CLICK anônimos (só UTM, sem contato) — esses são
+    //    registros de "rede de segurança" do clique, já contados no KPI
+    //    click_whats. Não são acionáveis (ninguém pra dar follow-up), então
+    //    não devem poluir a tabela de leads.
     let rawWa: Awaited<ReturnType<typeof prisma.lead.findMany>> = [];
     try {
       rawWa = await prisma.lead.findMany({
-        where: { productSlug: slug, eventType: "WHATSAPP_CLICK" },
+        where: {
+          productSlug: slug,
+          OR: [
+            { name: { not: null } },
+            { email: { not: null } },
+            { phone: { not: null } },
+          ],
+        },
         orderBy: { capturedAt: "desc" },
         take: 200,
       });
     } catch { /* Lead table vazia ou erro — segue só com Engaged */ }
 
     const waFiltered = rawWa.filter((r) => {
+      // descarta linhas sem NENHUM contato (defesa extra — o where já filtra)
+      if (!r.name && !r.email && !r.phone) return false;
       const e = normEmail(r.email);
       const p = normPhone(r.phone);
       if (e && paidEmails.has(e)) return false;
@@ -354,12 +369,25 @@ export default async function CockpitPage({
         utm_content: r.utmContent,
         utm_term: r.utmTerm,
       };
+      // Determina canal: WHATSAPP_CLICK → whatsapp. FORM_SUBMIT → olha
+      // rawJson.channel ('whatsapp' = barreira do WA; senão = consultor/form).
+      let channel = "whatsapp";
+      if (r.eventType === "FORM_SUBMIT") {
+        const rj = (r.rawJson && typeof r.rawJson === "object" && !Array.isArray(r.rawJson))
+          ? (r.rawJson as Record<string, unknown>)
+          : {};
+        channel = rj.channel === "whatsapp" ? "whatsapp" : "form";
+      }
+      const kind = channel === "whatsapp" ? "whatsapp" : "form";
+      const status = kind === "whatsapp"
+        ? (r.eventType === "FORM_SUBMIT" ? "WHATSAPP_LEAD" : "WHATSAPP_CLICK")
+        : "FORM_SUBMIT";
       rows.push({
         id: r.id,
-        kind: "whatsapp",
-        externalId: r.id, // sem externalId pro WA — usa o id do Lead
-        status: "WHATSAPP_CLICK",
-        lastEventType: "lead.whatsapp_click",
+        kind,
+        externalId: r.id,
+        status,
+        lastEventType: `lead.${r.eventType.toLowerCase()}`,
         customerName: r.name,
         customerEmail: r.email,
         customerPhone: r.phone,
