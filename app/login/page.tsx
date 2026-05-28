@@ -51,6 +51,47 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <div className="flex items-center gap-3" style={{ color: "var(--fg2)", fontSize: 11 }}>
+          <span style={{ flex: 1, height: 1, background: "var(--cockpit-border)" }} />
+          OU
+          <span style={{ flex: 1, height: 1, background: "var(--cockpit-border)" }} />
+        </div>
+
+        <form
+          action={async (formData: FormData) => {
+            "use server";
+            const email = String(formData.get("email") || "").trim().toLowerCase();
+            if (!email) return;
+            await signIn("nodemailer", { email, redirectTo: "/" });
+          }}
+          className="flex flex-col gap-3"
+        >
+          <input
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="seu@email.com"
+            className="w-full rounded-md px-3 py-3 text-sm"
+            style={{
+              background: "var(--cockpit-card)",
+              color: "var(--fg)",
+              border: "1px solid var(--cockpit-border)",
+            }}
+          />
+          <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-3 rounded-md py-3 text-sm font-semibold"
+            style={{
+              background: "transparent",
+              color: "var(--fg)",
+              border: "1px solid var(--cockpit-border)",
+            }}
+          >
+            Receber link de acesso por email
+          </button>
+        </form>
+
         <p style={{ color: "var(--fg2)", fontSize: 11, textAlign: "center" }}>
           Sem acesso? Fale com o admin do TechNow Hub.
         </p>
