@@ -35,6 +35,90 @@ const PAID_STATUS = new Set([
   "pago", "aprovado", "concluido", "sucesso",
 ]);
 
+// Base URL do microservico integracao-rd (mesmo endpoint que as LPs chamam
+// no submit do formulario). Default = prod; override via env se necessario.
+const INTEGRACAO_RD_URL = process.env.INTEGRACAO_RD_URL || "https://rd.technowhub.ai";
+
+/**
+ * Abre uma oportunidade no RD CRM para um lead que se CADASTROU no checkout
+ * Engaged mas ainda NAO comprou (evento purchase.lead_captured → DRAFT).
+ *
+ * Reusa o MESMO endpoint /api/leads que o formulario das LPs usa — logo o
+ * deal cai no funil/etapa configurados no registry do integracao-rd para o
+ * `campaign_slug`. Mecanismo GENERICO: qualquer produto novo so precisa ter
+ * `campaignSlug` em PRODUCTS + a entrada correspondente no registry — sem
+ * tocar codigo. channel="engaged" distingue de leads de formulario.
+ *
+ * Best-effort: nunca quebra o webhook. RD CRM exige email OU telefone.
+ */
+async function pushEngagedLeadToRdCrm(args: {
+  campaignSlug: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  sourcePage: string;
+  attribution: Record<string, string> | null;
+}): Promise<{ ok: boolean; status?: number; dealId?: string | null; detail?: string }> {
+  if (!args.email && !args.phone) return { ok: false, detail: "no_email_or_phone" };
+  const a = args.attribution || {};
+  const body = {
+    campaign_slug: args.campaignSlug,
+    name: args.name || "",
+    email: args.email || "",
+    phone: args.phone || "",
+    channel: "engaged",
+    source_page: args.sourcePage,
+    utm: {
+      source: a.utm_source || null,
+      medium: a.utm_medium || null,
+      campaign: a.utm_campaign || null,
+      content: a.utm_content || null,
+      term: a.utm_term || null,
+    },
+    extra: {
+      intent: "engaged_lead_captured",
+      origem: "Cadastrou no checkout Engaged mas ainda nao comprou",
+    },
+  };
+  try {
+    const res = await fetch(`${INTEGRACAO_RD_URL}/api/leads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      return { ok: false, status: res.status, detail: txt.slice(0, 300) };
+    }
+    // /api/leads retorna { contact_id, deal_id, status } — guardamos deal_id
+    // pra poder REMOVER a oportunidade se esse lead depois comprar.
+    const json = (await res.json().catch(() => null)) as { deal_id?: string | null } | null;
+    return { ok: true, status: res.status, dealId: json?.deal_id ?? null };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Remove uma oportunidade no RD CRM (via integracao-rd). Chamado quando um
+ * lead que se cadastrou no Engaged (DRAFT) depois COMPRA — comprador nao deve
+ * ficar com deal aberto no funil de vendas. Best-effort; auth server-to-server
+ * via secret compartilhado IRIS_WEBHOOK_SECRET.
+ */
+async function removeRdDeal(dealId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${INTEGRACAO_RD_URL}/api/deals/${encodeURIComponent(dealId)}`, {
+      method: "DELETE",
+      headers: { "X-Iris-Secret": process.env.IRIS_WEBHOOK_SECRET || "" },
+      signal: AbortSignal.timeout(8000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Mapeia o `eventType` do Engaged pro status interno do EngagedPurchase.
  * Tabela canonica do Engaged:
@@ -701,6 +785,15 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     };
   }
 
+  // Detecta se essa purchase eh NOVA (ainda nao existe no DB). Usado pra
+  // disparar o lead no RD CRM uma unica vez por externalId — re-entregas do
+  // mesmo evento (Engaged reenvia) nao duplicam oportunidade.
+  const priorPurchase = await prisma.engagedPurchase.findUnique({
+    where: { productSlug_externalId: { productSlug, externalId } },
+    select: { id: true },
+  });
+  const isNewPurchase = !priorPurchase;
+
   // ─── STEP 1: SEMPRE upsert EngagedPurchase ────────────────────────────
   // Independente do status, registra o estado atual da compra.
   let engagedPurchase;
@@ -752,6 +845,37 @@ export async function processEngagedPayload(rawBody: string): Promise<{
 
   // ─── STEP 2: Se PAID, criar/atualizar Sale tambem ─────────────────────
   if (purchaseStatus !== "PAID") {
+    // LEAD ENGAGED → RD CRM: quando alguem se cadastra no checkout Engaged
+    // (lead_captured = DRAFT) mas ainda nao comprou, abre uma oportunidade no
+    // RD CRM igual ao formulario das LPs. So no primeiro evento DRAFT da
+    // purchase (isNewPurchase) e so se o produto tem campaignSlug.
+    let rdLead: { ok: boolean; status?: number; dealId?: string | null; detail?: string } | undefined;
+    if (purchaseStatus === "DRAFT" && isNewPurchase && matchedProduct.campaignSlug) {
+      rdLead = await pushEngagedLeadToRdCrm({
+        campaignSlug: matchedProduct.campaignSlug,
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone,
+        sourcePage: matchedProduct.lpUrl,
+        attribution,
+      });
+      if (rdLead.ok) {
+        console.log(
+          `[engaged] RD CRM lead criado (DRAFT) produto=${productSlug} campaign=${matchedProduct.campaignSlug} dealId=${rdLead.dealId ?? "?"}`
+        );
+        // Guarda o deal_id pra remover a oportunidade se o lead depois comprar.
+        if (rdLead.dealId) {
+          await prisma.engagedPurchase
+            .update({
+              where: { id: engagedPurchase.id },
+              data: { rdDealId: rdLead.dealId },
+            })
+            .catch((e) => console.error("[engaged] falha ao gravar rdDealId:", e));
+        }
+      } else {
+        console.error("[engaged] RD CRM lead falhou (best-effort):", rdLead);
+      }
+    }
     return {
       statusCode: 200,
       body: {
@@ -759,6 +883,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
         externalId,
         engagedPurchaseId: engagedPurchase.id,
         purchaseStatus,
+        ...(rdLead ? { rdLead } : {}),
       },
       outcome: "tracked",
       reason: `engaged_purchase:${purchaseStatus}`,
@@ -771,15 +896,37 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   // waiting_payment criam linhas com externalId diferente do evento .paid.
   // Match por email exato OU telefone (ultimos 8 digitos) OU nome aprox.
   try {
-    await promoteSiblingLeadsToPaid({
+    const promote = await promoteSiblingLeadsToPaid({
       productSlug,
       target: { customerName, customerEmail, customerPhone },
       excludeIds: [engagedPurchase.id],
       reason: `engaged ${eventType ?? "purchase.paid"}`,
     });
+
+    // REMOVER oportunidades do RD CRM: quem se cadastrou no Engaged (DRAFT)
+    // ganhou um deal; agora que COMPROU, esse deal nao deve ficar aberto no
+    // funil. Coleta deal_ids da propria linha (caso DRAFT/PAID compartilhem
+    // externalId) + dos irmaos promovidos. Best-effort, idempotente.
+    const dealsToRemove = new Map<string, string>(); // dealId → engagedPurchaseId
+    if (engagedPurchase.rdDealId) dealsToRemove.set(engagedPurchase.rdDealId, engagedPurchase.id);
+    for (const m of promote.matchedBy) {
+      if (m.rdDealId) dealsToRemove.set(m.rdDealId, m.id);
+    }
+    for (const [dealId, purchaseId] of dealsToRemove) {
+      const removed = await removeRdDeal(dealId);
+      if (removed) {
+        // Limpa rdDealId pra nao tentar remover de novo em re-entrega do webhook.
+        await prisma.engagedPurchase
+          .update({ where: { id: purchaseId }, data: { rdDealId: null } })
+          .catch(() => {});
+        console.log(`[engaged] RD CRM deal removido (cliente comprou) dealId=${dealId}`);
+      } else {
+        console.error(`[engaged] falha ao remover RD CRM deal (best-effort) dealId=${dealId}`);
+      }
+    }
   } catch (err) {
     // best-effort — nao quebra fluxo
-    console.error("[engaged] sibling promote failed:", err);
+    console.error("[engaged] sibling promote/remove failed:", err);
   }
 
   if (amount <= 0) {

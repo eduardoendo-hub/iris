@@ -412,6 +412,11 @@ model EngagedPurchase {
   lastUpdatedAt   DateTime @updatedAt
   saleId          String?  // FK soft pra Sale quando virou PAID
 
+  // ID da oportunidade criada no RD CRM quando esse lead se cadastrou no
+  // Engaged (DRAFT) mas ainda nao comprou. Quando o cliente PAGA, essa
+  // oportunidade e removida do RD (comprador nao deve ficar com deal aberto).
+  rdDealId        String?
+
   // Atribuicao — queryParams + utms vindos do webhook Engaged. Copiado pra
   // Sale.attribution quando vira PAID. Permite saber canal/campanha da venda.
   attribution     Json?

@@ -94,7 +94,10 @@ export async function promoteSiblingLeadsToPaid(opts: {
   target: Person;
   excludeIds?: string[];
   reason?: string;
-}): Promise<{ promotedIds: string[]; matchedBy: Array<{ id: string; match: string }> }> {
+}): Promise<{
+  promotedIds: string[];
+  matchedBy: Array<{ id: string; match: string; rdDealId: string | null }>;
+}> {
   const { productSlug, target, excludeIds = [], reason = "auto-promoted" } = opts;
 
   // Sem nenhum identificador, nao tem como matchar
@@ -118,10 +121,11 @@ export async function promoteSiblingLeadsToPaid(opts: {
       customerEmail: true,
       customerPhone: true,
       customerName: true,
+      rdDealId: true,
     },
   });
 
-  const matched: Array<{ id: string; match: string }> = [];
+  const matched: Array<{ id: string; match: string; rdDealId: string | null }> = [];
   for (const c of candidates) {
     if (!isSamePerson(c, target)) continue;
     // Classifica como bateu (email / phone / name) pro audit log
@@ -134,7 +138,7 @@ export async function promoteSiblingLeadsToPaid(opts: {
       const tp = phoneTail(target.customerPhone);
       if (lp && tp && lp === tp) match = "phone";
     }
-    matched.push({ id: c.id, match });
+    matched.push({ id: c.id, match, rdDealId: c.rdDealId });
   }
 
   if (matched.length === 0) return { promotedIds: [], matchedBy: [] };
