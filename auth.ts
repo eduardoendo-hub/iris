@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import Nodemailer from "next-auth/providers/nodemailer";
+import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 
@@ -34,19 +34,39 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET,
     }),
     // Magic link por email (sem senha) — pra quem não tem conta Google.
-    // SMTP via Zoho (admin@technowhub.ai). A whitelist no callback signIn
-    // roda ANTES do envio, então email fora da lista nem recebe o link.
-    Nodemailer({
-      server: {
-        host: process.env.EMAIL_SERVER_HOST,
-        port: Number(process.env.EMAIL_SERVER_PORT || 465),
-        secure: Number(process.env.EMAIL_SERVER_PORT || 465) === 465,
-        auth: {
-          user: process.env.EMAIL_SERVER_USER,
-          pass: process.env.EMAIL_SERVER_PASSWORD,
-        },
-      },
+    // Envio via API HTTP do Resend (porta 443) porque a Hetzner bloqueia SMTP
+    // de saída. A whitelist no callback signIn roda ANTES do envio, então
+    // email fora da lista nem recebe o link.
+    Resend({
+      apiKey: process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM,
+      async sendVerificationRequest({ identifier: to, url, provider }) {
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: provider.from,
+            to,
+            subject: "Seu link de acesso ao IRIS",
+            text: `Acesse o IRIS por este link (expira em 24h):\n${url}\n\nSe você não solicitou, ignore este email.`,
+            html: `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px">
+  <h2 style="color:#111">IRIS · TechNow Cockpit</h2>
+  <p>Clique no botão abaixo para entrar. O link expira em 24h.</p>
+  <p style="margin:24px 0">
+    <a href="${url}" style="background:#0fb9b1;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">Entrar no IRIS</a>
+  </p>
+  <p style="color:#666;font-size:13px">Se o botão não funcionar, copie e cole este endereço:<br>${url}</p>
+  <p style="color:#999;font-size:12px">Se você não solicitou este acesso, ignore este email.</p>
+</div>`,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error("Resend error: " + JSON.stringify(await res.json()));
+        }
+      },
     }),
   ],
   session: { strategy: "database" },

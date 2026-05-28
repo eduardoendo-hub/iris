@@ -62,7 +62,7 @@ export default function LoginPage() {
             "use server";
             const email = String(formData.get("email") || "").trim().toLowerCase();
             if (!email) return;
-            await signIn("nodemailer", { email, redirectTo: "/" });
+            await signIn("resend", { email, redirectTo: "/" });
           }}
           className="flex flex-col gap-3"
         >
