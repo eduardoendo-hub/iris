@@ -104,6 +104,20 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     //   https://impacta.site.engaged.com.br/p/checkout/wpjw515nvn
     engagedCheckoutSharedIds: ["wpjw515nvn"],
   },
+  "advia": {
+    slug: "advia",
+    name: "ADV-IA",
+    // LP servida em advia.technowhub.ai; advia.impacta.com.br redireciona pra cá.
+    lpUrl: "https://advia.technowhub.ai",
+    // Convenção esperada nas campanhas Meta/Google: nome contendo "ADVIA"
+    // (ex.: "M1-PROSP-ADVIA-JUN26", "G1-SEARCH-ADVIA-JUN26").
+    metaCampaignFilter: "ADVIA",
+    googleCampaignFilter: "ADVIA",
+    campaignSlug: "advia-junho-2026",
+    // Engaged checkout SharedID — extraído de
+    //   https://impacta.site.engaged.com.br/p/checkout/4jtt6rr7ti
+    engagedCheckoutSharedIds: ["4jtt6rr7ti"],
+  },
 
   // Future products — descomentar quando entrarem:
   //

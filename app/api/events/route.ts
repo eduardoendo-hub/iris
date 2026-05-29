@@ -38,6 +38,9 @@ const ALLOWED_ORIGINS = new Set([
   // Código Zero
   "https://codigozero.technowhub.ai",    // canonico (LP servida aqui)
   "https://codigozero.impacta.com.br",   // redirect -> technowhub
+  // ADV-IA
+  "https://advia.technowhub.ai",         // canonico (LP servida aqui)
+  "https://advia.impacta.com.br",        // redirect -> technowhub
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev
