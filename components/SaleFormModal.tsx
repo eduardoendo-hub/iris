@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CartIcon, ConsultorIcon } from "./icons";
+import { toSpDatetimeLocalValue, spDatetimeLocalToUtcISO } from "@/lib/datetime";
 
 export type SaleSourceManual = "DIRETA" | "CONSULTOR";
 
@@ -43,19 +44,22 @@ export function SaleFormModal({
     }
   });
 
-  // Default datetime-local: usa a data da venda original ou agora
-  const defaultDate = (() => {
-    const d = initial?.saleDate ? new Date(initial.saleDate) : new Date();
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-  })();
+  // Default datetime-local: usa a data da venda original ou agora, sempre como
+  // horario de parede de Sao Paulo (independente do fuso do navegador).
+  const defaultDate = toSpDatetimeLocalValue(
+    initial?.saleDate ? new Date(initial.saleDate) : new Date()
+  );
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
+    // O <input datetime-local> devolve horario de parede sem fuso. Tratamos como
+    // horario de Sao Paulo e convertemos para um instante UTC explicito, senao o
+    // servidor (UTC) interpretaria a hora literal como UTC e gravaria -3h errado.
+    const rawSaleDate = (fd.get("saleDate") as string | null) || "";
+    const saleDate = rawSaleDate ? spDatetimeLocalToUtcISO(rawSaleDate) : undefined;
     const payload = {
       productSlug,
       source,
@@ -63,7 +67,7 @@ export function SaleFormModal({
       customerEmail: fd.get("customerEmail") || null,
       customerPhone: fd.get("customerPhone") || null,
       amount: fd.get("amount"),
-      saleDate: fd.get("saleDate") || undefined,
+      saleDate,
       notes: fd.get("notes") || null,
     };
     try {
