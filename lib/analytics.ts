@@ -24,6 +24,25 @@ export type DailySalesPoint = {
   cumulativeCount: number;  // contagem corrente
 };
 
+export type DailyInvestmentPoint = {
+  date: string;            // ISO YYYY-MM-DD (SP)
+  spend: number;           // investimento de midia no dia (R$)
+  cumulativeSpend: number; // soma corrente desde o inicio do periodo
+};
+
+export type CampaignResults = {
+  salesCount: number;       // Vendas Totais (janela da campanha)
+  revenue: number;          // Receita (R$)
+  mediaInvestment: number;  // Investimento Midia (Meta + Google + manual)
+  totalInvestment: number;  // Investimento Total (midia + custos de producao)
+  roas: number;             // Receita / Investimento Total
+  campaignStart: string | null; // YYYY-MM-DD (data de ativacao)
+  campaignEnd: string | null;   // YYYY-MM-DD (data de desativacao prevista)
+};
+
+/** Fontes de spend que somam como investimento de midia. */
+const MEDIA_SPEND_SOURCES = ["META_ADS", "GOOGLE_ADS", "MANUAL"] as const;
+
 /** Retorna array de YYYY-MM-DD (SP) cobrindo o periodo, sem buracos. */
 function spDateRange(days: number): string[] {
   const dates: string[] = [];
@@ -150,4 +169,147 @@ export async function getDailySales(opts: {
     });
   }
   return out;
+}
+
+/**
+ * Investimento de midia por dia (SP) nos ultimos `days` dias.
+ * Soma spend de Meta + Google (ingerido) + lancamentos MANUAL.
+ * Retorna diario + acumulado, mesmo formato de getDailySales.
+ */
+export async function getDailyInvestments(opts: {
+  productSlug: string;
+  days: number;
+}): Promise<DailyInvestmentPoint[]> {
+  const { productSlug } = opts;
+  const days = Math.min(Math.max(opts.days, 1), 90);
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  let samples: Array<{ startsAt: Date; value: unknown }> = [];
+  try {
+    samples = await prisma.metricSample.findMany({
+      where: {
+        productSlug,
+        bucket: "DAY",
+        metric: "spend",
+        source: { in: [...MEDIA_SPEND_SOURCES] },
+        startsAt: { gte: since },
+      },
+      orderBy: { startsAt: "asc" },
+      select: { startsAt: true, value: true },
+    });
+  } catch {
+    samples = [];
+  }
+
+  const dateRange = spDateRange(days);
+  const map = new Map<string, number>();
+  for (const dt of dateRange) map.set(dt, 0);
+  for (const s of samples) {
+    const dt = spDateString(s.startsAt);
+    if (!map.has(dt)) continue;
+    map.set(dt, (map.get(dt) ?? 0) + Number(s.value));
+  }
+
+  let cum = 0;
+  const out: DailyInvestmentPoint[] = [];
+  for (const dt of dateRange) {
+    const spend = map.get(dt) ?? 0;
+    cum += spend;
+    out.push({ date: dt, spend, cumulativeSpend: cum });
+  }
+  return out;
+}
+
+/**
+ * Sumario "Resultados" da campanha: Vendas Totais, Receita, Investimento
+ * (midia e total) e ROAS. Tudo escopado a janela da campanha selecionada
+ * (de startDate em diante); sem campanha cai pra all-time.
+ */
+export async function getCampaignResults(opts: {
+  productSlug: string;
+  campaignSlug?: string | null;
+}): Promise<CampaignResults> {
+  const { productSlug } = opts;
+
+  const select = {
+    startDate: true,
+    endDate: true,
+    productionCostLP: true,
+    productionCostAds: true,
+    productionCostOther: true,
+  } as const;
+
+  let campaign:
+    | {
+        startDate: Date;
+        endDate: Date;
+        productionCostLP: unknown;
+        productionCostAds: unknown;
+        productionCostOther: unknown;
+      }
+    | null = null;
+  try {
+    campaign = opts.campaignSlug
+      ? await prisma.campaign.findUnique({ where: { slug: opts.campaignSlug }, select })
+      : await prisma.campaign.findFirst({
+          where: { productSlug, isActive: true },
+          select,
+        });
+  } catch {
+    campaign = null;
+  }
+
+  // Datas em YYYY-MM-DD (SP) — usa o date-part cru, igual o cockpit faz.
+  const campaignStart = campaign ? campaign.startDate.toISOString().slice(0, 10) : null;
+  const campaignEnd = campaign ? campaign.endDate.toISOString().slice(0, 10) : null;
+  // Instante UTC da meia-noite SP do dia 1, pra filtrar vendas/spend.
+  const since = campaignStart ? new Date(`${campaignStart}T03:00:00.000Z`) : null;
+
+  let salesCount = 0;
+  let revenue = 0;
+  try {
+    const agg = await prisma.sale.aggregate({
+      where: { productSlug, ...(since ? { saleDate: { gte: since } } : {}) },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    salesCount = agg._count._all;
+    revenue = Number(agg._sum.amount ?? 0);
+  } catch {
+    /* tabela inexistente */
+  }
+
+  let mediaInvestment = 0;
+  try {
+    const agg = await prisma.metricSample.aggregate({
+      where: {
+        productSlug,
+        bucket: "DAY",
+        metric: "spend",
+        source: { in: [...MEDIA_SPEND_SOURCES] },
+        ...(since ? { startsAt: { gte: since } } : {}),
+      },
+      _sum: { value: true },
+    });
+    mediaInvestment = Number(agg._sum.value ?? 0);
+  } catch {
+    /* tabela inexistente */
+  }
+
+  const productionCosts =
+    Number(campaign?.productionCostLP ?? 0) +
+    Number(campaign?.productionCostAds ?? 0) +
+    Number(campaign?.productionCostOther ?? 0);
+  const totalInvestment = mediaInvestment + productionCosts;
+  const roas = totalInvestment > 0 ? revenue / totalInvestment : 0;
+
+  return {
+    salesCount,
+    revenue,
+    mediaInvestment,
+    totalInvestment,
+    roas,
+    campaignStart,
+    campaignEnd,
+  };
 }

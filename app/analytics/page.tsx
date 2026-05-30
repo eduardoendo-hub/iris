@@ -5,7 +5,15 @@ import { TabNav } from "@/components/TabNav";
 import { PeriodSelector } from "@/components/PeriodSelector";
 import { CaptacaoChart } from "@/components/CaptacaoChart";
 import { VendasChart, VendasCountChart } from "@/components/VendasChart";
-import { getDailyEvents, getDailySales } from "@/lib/analytics";
+import { InvestimentosChart } from "@/components/InvestimentosChart";
+import { ResultadosPanel } from "@/components/ResultadosPanel";
+import { InvestmentFormButton } from "@/components/InvestmentFormButton";
+import {
+  getDailyEvents,
+  getDailySales,
+  getDailyInvestments,
+  getCampaignResults,
+} from "@/lib/analytics";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -46,9 +54,11 @@ export default async function AnalyticsPage({
   const daysRaw = parseInt(params.days ?? "30", 10);
   const days = [10, 30, 60].includes(daysRaw) ? daysRaw : 30;
 
-  const [events, sales] = await Promise.all([
+  const [events, sales, investments, results] = await Promise.all([
     getDailyEvents({ productSlug: slug, days }),
     getDailySales({ productSlug: slug, days }),
+    getDailyInvestments({ productSlug: slug, days }),
+    getCampaignResults({ productSlug: slug, campaignSlug: selectedCampaignSlug }),
   ]);
 
   return (
@@ -83,6 +93,9 @@ export default async function AnalyticsPage({
         <div className="flex items-center justify-end">
           <PeriodSelector current={days} productSlug={slug} campaignSlug={selectedCampaignSlug} />
         </div>
+
+        {/* RESULTADOS — sumário executivo (primeiro bloco) */}
+        <ResultadosPanel results={results} />
 
         {/* CAPTAÇÃO */}
         <section className="flex flex-col gap-4">
@@ -131,6 +144,33 @@ export default async function AnalyticsPage({
           </header>
           <VendasChart data={sales} />
           <VendasCountChart data={sales} />
+        </section>
+
+        {/* INVESTIMENTOS */}
+        <section className="flex flex-col gap-4">
+          <header
+            className="pb-2 flex items-end justify-between gap-3 flex-wrap"
+            style={{ borderBottom: "1px solid var(--cockpit-border)" }}
+          >
+            <div className="flex flex-col">
+              <span
+                style={{
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: "var(--ls-eyebrow)",
+                  color: "var(--brand)",
+                  fontWeight: 700,
+                }}
+              >
+                Investimentos
+              </span>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)" }}>
+                Investimento de mídia — diário e acumulado
+              </h2>
+            </div>
+            <InvestmentFormButton productSlug={slug} />
+          </header>
+          <InvestimentosChart data={investments} />
         </section>
       </main>
 
