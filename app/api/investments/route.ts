@@ -2,11 +2,12 @@
  * /api/investments — registrar (POST) e listar (GET) investimento de mídia
  * diário, lançado manualmente quando não há ingestão automática de Meta/Google.
  *
- * Armazenado em MetricSample (source=MANUAL, metric="spend", bucket=DAY) pra
- * somar junto com o spend ingerido das plataformas e alimentar o ROAS.
+ * Armazenado por plataforma em MetricSample (source=META_ADS / GOOGLE_ADS,
+ * metric="spend", bucket=DAY) pra somar junto com o spend ingerido e alimentar
+ * o ROAS, mantendo a divisão Meta x Google nos gráficos e no resumo.
  *
- * GET  ?product=<slug>&days=<n>  : lista lançamentos manuais do produto
- * POST {productSlug, date, amount, notes?}  : upsert do dia (idempotente)
+ * GET  ?product=<slug>&days=<n>  : lista lançamentos de mídia do produto
+ * POST {productSlug, date, meta?, google?, notes?}  : upsert do dia (idempotente)
  *
  * Auth POST: X-Admin-Secret = IRIS_WEBHOOK_SECRET (mesmo padrão de /api/sales).
  */
@@ -24,13 +25,19 @@ function authorized(req: NextRequest): boolean {
   return provided === secret;
 }
 
-const InvestmentInput = z.object({
-  productSlug: z.string().min(2).max(64),
-  // Dia do investimento em horario de Sao Paulo (YYYY-MM-DD).
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date deve ser YYYY-MM-DD"),
-  amount: z.coerce.number().min(0),
-  notes: z.string().max(500).nullish(),
-});
+const InvestmentInput = z
+  .object({
+    productSlug: z.string().min(2).max(64),
+    // Dia do investimento em horario de Sao Paulo (YYYY-MM-DD).
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date deve ser YYYY-MM-DD"),
+    meta: z.coerce.number().min(0).optional(),
+    google: z.coerce.number().min(0).optional(),
+    notes: z.string().max(500).nullish(),
+  })
+  .refine((d) => d.meta !== undefined || d.google !== undefined, {
+    message: "informe ao menos meta ou google",
+    path: ["meta"],
+  });
 
 /** "YYYY-MM-DD" (SP) -> instante UTC da meia-noite SP (03:00 UTC). */
 function spMidnightUTC(date: string): Date {
@@ -47,22 +54,39 @@ export async function GET(req: NextRequest) {
     const samples = await prisma.metricSample.findMany({
       where: {
         productSlug: product,
-        source: "MANUAL",
+        source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] },
         metric: "spend",
         bucket: "DAY",
         startsAt: { gte: since },
       },
       orderBy: { startsAt: "desc" },
-      select: { startsAt: true, value: true, meta: true },
+      select: { startsAt: true, value: true, source: true, meta: true },
     });
-    return NextResponse.json({
-      product,
-      investments: samples.map((s) => ({
-        date: s.startsAt.toISOString().slice(0, 10),
-        amount: Number(s.value),
-        meta: s.meta ?? null,
-      })),
-    });
+    // Agrupa por dia, separando Meta x Google (MANUAL legado entra no total).
+    const byDate = new Map<
+      string,
+      { meta: number; google: number; amount: number; metaJson: unknown }
+    >();
+    for (const s of samples) {
+      const date = s.startsAt.toISOString().slice(0, 10);
+      const slot = byDate.get(date) ?? { meta: 0, google: 0, amount: 0, metaJson: null };
+      const v = Number(s.value);
+      if (s.source === "META_ADS") slot.meta += v;
+      else if (s.source === "GOOGLE_ADS") slot.google += v;
+      slot.amount += v;
+      if (s.meta != null) slot.metaJson = s.meta;
+      byDate.set(date, slot);
+    }
+    const investments = Array.from(byDate.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([date, v]) => ({
+        date,
+        meta: v.meta,
+        google: v.google,
+        amount: v.amount,
+        notes: v.metaJson,
+      }));
+    return NextResponse.json({ product, investments });
   } catch (err) {
     return NextResponse.json(
       { error: "db_error", message: err instanceof Error ? err.message : String(err) },
@@ -89,39 +113,52 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { productSlug, date, amount, notes } = parsed.data;
+  const { productSlug, date, meta: metaAmount, google: googleAmount, notes } = parsed.data;
   const startsAt = spMidnightUTC(date);
-  const meta = notes ? { notes } : undefined;
+  const metaJson = notes ? { notes } : undefined;
 
-  try {
-    const sample = await prisma.metricSample.upsert({
-      where: {
-        productSlug_source_metric_bucket_startsAt: {
-          productSlug,
-          source: "MANUAL",
-          metric: "spend",
-          bucket: "DAY",
-          startsAt,
-        },
+  /** Upsert (ou remove se 0/undefined) de uma plataforma no dia. */
+  async function upsertPlatform(source: "META_ADS" | "GOOGLE_ADS", amount?: number) {
+    const where = {
+      productSlug_source_metric_bucket_startsAt: {
+        productSlug,
+        source,
+        metric: "spend",
+        bucket: "DAY",
+        startsAt,
       },
+    } as const;
+    if (amount === undefined) return; // plataforma não enviada: preserva valor existente
+    await prisma.metricSample.upsert({
+      where,
       create: {
         productSlug,
-        source: "MANUAL",
+        source,
         metric: "spend",
         bucket: "DAY",
         startsAt,
         value: amount,
         unit: "BRL",
-        meta,
+        meta: metaJson,
       },
-      update: { value: amount, meta },
+      update: { value: amount, meta: metaJson },
+    });
+  }
+
+  try {
+    await upsertPlatform("META_ADS", metaAmount);
+    await upsertPlatform("GOOGLE_ADS", googleAmount);
+    // Remove lançamento MANUAL legado do dia pra não duplicar no total de mídia.
+    await prisma.metricSample.deleteMany({
+      where: { productSlug, source: "MANUAL", metric: "spend", bucket: "DAY", startsAt },
     });
     return NextResponse.json(
       {
         status: "saved",
         investment: {
           date,
-          amount: Number(sample.value),
+          meta: metaAmount ?? 0,
+          google: googleAmount ?? 0,
           productSlug,
         },
       },

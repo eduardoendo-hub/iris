@@ -26,14 +26,18 @@ export type DailySalesPoint = {
 
 export type DailyInvestmentPoint = {
   date: string;            // ISO YYYY-MM-DD (SP)
-  spend: number;           // investimento de midia no dia (R$)
-  cumulativeSpend: number; // soma corrente desde o inicio do periodo
+  spendMeta: number;       // investido em Meta Ads no dia (R$)
+  spendGoogle: number;     // investido em Google Ads no dia (R$)
+  spend: number;           // total do dia (Meta + Google + legado manual)
+  cumulativeSpend: number; // soma corrente do total desde o inicio do periodo
 };
 
 export type CampaignResults = {
   salesCount: number;       // Vendas Totais (janela da campanha)
   revenue: number;          // Receita (R$)
-  mediaInvestment: number;  // Investimento Midia (Meta + Google + manual)
+  mediaInvestment: number;  // Investimento Midia total (Meta + Google + manual)
+  mediaMeta: number;        // parte Meta Ads
+  mediaGoogle: number;      // parte Google Ads
   totalInvestment: number;  // Investimento Total (midia + custos de producao)
   roas: number;             // Receita / Investimento Total
   campaignStart: string | null; // YYYY-MM-DD (data de ativacao)
@@ -184,7 +188,7 @@ export async function getDailyInvestments(opts: {
   const days = Math.min(Math.max(opts.days, 1), 90);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  let samples: Array<{ startsAt: Date; value: unknown }> = [];
+  let samples: Array<{ startsAt: Date; value: unknown; source: string }> = [];
   try {
     samples = await prisma.metricSample.findMany({
       where: {
@@ -195,27 +199,38 @@ export async function getDailyInvestments(opts: {
         startsAt: { gte: since },
       },
       orderBy: { startsAt: "asc" },
-      select: { startsAt: true, value: true },
+      select: { startsAt: true, value: true, source: true },
     });
   } catch {
     samples = [];
   }
 
   const dateRange = spDateRange(days);
-  const map = new Map<string, number>();
-  for (const dt of dateRange) map.set(dt, 0);
+  const map = new Map<string, { meta: number; google: number; other: number }>();
+  for (const dt of dateRange) map.set(dt, { meta: 0, google: 0, other: 0 });
   for (const s of samples) {
     const dt = spDateString(s.startsAt);
-    if (!map.has(dt)) continue;
-    map.set(dt, (map.get(dt) ?? 0) + Number(s.value));
+    const slot = map.get(dt);
+    if (!slot) continue;
+    const v = Number(s.value);
+    if (s.source === "META_ADS") slot.meta += v;
+    else if (s.source === "GOOGLE_ADS") slot.google += v;
+    else slot.other += v; // MANUAL legado
   }
 
   let cum = 0;
   const out: DailyInvestmentPoint[] = [];
   for (const dt of dateRange) {
-    const spend = map.get(dt) ?? 0;
+    const slot = map.get(dt) ?? { meta: 0, google: 0, other: 0 };
+    const spend = slot.meta + slot.google + slot.other;
     cum += spend;
-    out.push({ date: dt, spend, cumulativeSpend: cum });
+    out.push({
+      date: dt,
+      spendMeta: slot.meta,
+      spendGoogle: slot.google,
+      spend,
+      cumulativeSpend: cum,
+    });
   }
   return out;
 }
@@ -280,8 +295,11 @@ export async function getCampaignResults(opts: {
   }
 
   let mediaInvestment = 0;
+  let mediaMeta = 0;
+  let mediaGoogle = 0;
   try {
-    const agg = await prisma.metricSample.aggregate({
+    const agg = await prisma.metricSample.groupBy({
+      by: ["source"],
       where: {
         productSlug,
         bucket: "DAY",
@@ -291,7 +309,13 @@ export async function getCampaignResults(opts: {
       },
       _sum: { value: true },
     });
-    mediaInvestment = Number(agg._sum.value ?? 0);
+    for (const row of agg) {
+      const v = Number(row._sum.value ?? 0);
+      mediaInvestment += v;
+      if (row.source === "META_ADS") mediaMeta += v;
+      else if (row.source === "GOOGLE_ADS") mediaGoogle += v;
+      // MANUAL legado entra só no total de mídia
+    }
   } catch {
     /* tabela inexistente */
   }
@@ -307,6 +331,8 @@ export async function getCampaignResults(opts: {
     salesCount,
     revenue,
     mediaInvestment,
+    mediaMeta,
+    mediaGoogle,
     totalInvestment,
     roas,
     campaignStart,

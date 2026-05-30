@@ -57,7 +57,8 @@ export function InvestimentosChart({ data }: { data: DailyInvestmentPoint[] }) {
           </h3>
         </div>
         <div className="flex items-center gap-3 text-xs" style={{ color: "var(--fg2)" }}>
-          <Legend color="#FF9F0A" label="Investido/dia" shape="bar" />
+          <Legend color="#0A84FF" label="Meta/dia" shape="bar" />
+          <Legend color="#FFD60A" label="Google/dia" shape="bar" />
           <Legend color="#D97757" label="Investido acumulado" shape="line" />
         </div>
       </header>
@@ -101,12 +102,20 @@ export function InvestimentosChart({ data }: { data: DailyInvestmentPoint[] }) {
               labelFormatter={(d) => tickDate(String(d))}
               formatter={(v, name) => {
                 const num = Number(v);
-                if (name === "spend") return [formatBRL(num), "Investido no dia"];
+                if (name === "spendMeta") return [formatBRL(num), "Meta Ads"];
+                if (name === "spendGoogle") return [formatBRL(num), "Google Ads"];
                 if (name === "cumulativeSpend") return [formatBRL(num), "Investido acumulado"];
                 return [num, String(name)];
               }}
             />
-            <Bar yAxisId="left" dataKey="spend" fill="#FF9F0A" radius={[3, 3, 0, 0]} />
+            <Bar yAxisId="left" dataKey="spendMeta" stackId="spend" fill="#0A84FF" />
+            <Bar
+              yAxisId="left"
+              dataKey="spendGoogle"
+              stackId="spend"
+              fill="#FFD60A"
+              radius={[3, 3, 0, 0]}
+            />
             <Line
               yAxisId="right"
               type="monotone"

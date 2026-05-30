@@ -37,12 +37,20 @@ export function InvestmentFormModal({
     setSubmitting(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
-    const payload = {
+    const metaRaw = (fd.get("meta") as string | null)?.trim() || "";
+    const googleRaw = (fd.get("google") as string | null)?.trim() || "";
+    if (!metaRaw && !googleRaw) {
+      setError("Informe ao menos um valor (Meta ou Google).");
+      setSubmitting(false);
+      return;
+    }
+    const payload: Record<string, unknown> = {
       productSlug,
       date: fd.get("date"),
-      amount: fd.get("amount"),
       notes: fd.get("notes") || null,
     };
+    if (metaRaw) payload.meta = metaRaw;
+    if (googleRaw) payload.google = googleRaw;
     try {
       const r = await fetch("/api/investments", {
         method: "POST",
@@ -121,27 +129,37 @@ export function InvestmentFormModal({
         </div>
 
         <p style={{ fontSize: 12, color: "var(--fg2)", marginTop: -4 }}>
-          Valor investido no dia. Re-enviar o mesmo dia <b>substitui</b> o valor anterior.
+          Valor investido no dia por plataforma. Re-enviar o mesmo dia <b>substitui</b> os valores
+          anteriores. Informe ao menos um (Meta ou Google).
         </p>
 
+        <Field label="Dia *">
+          <input
+            name="date"
+            type="date"
+            required
+            defaultValue={todaySP()}
+            className="iris-input"
+          />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Dia *">
+          <Field label="Meta Ads (R$)">
             <input
-              name="date"
-              type="date"
-              required
-              defaultValue={todaySP()}
+              name="meta"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="650.00"
               className="iris-input"
             />
           </Field>
-          <Field label="Valor investido (R$) *">
+          <Field label="Google Ads (R$)">
             <input
-              name="amount"
+              name="google"
               type="number"
               step="0.01"
-              required
               min="0"
-              placeholder="650.00"
+              placeholder="420.00"
               className="iris-input"
             />
           </Field>

@@ -160,7 +160,7 @@ export default async function CockpitPage({
         metric: "spend",
         bucket: "DAY",
         startsAt: todayUTC,
-        source: { in: ["META_ADS", "GOOGLE_ADS"] },
+        source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] },
       },
       _sum: { value: true },
     });
@@ -178,7 +178,7 @@ export default async function CockpitPage({
         metric: "spend",
         bucket: "DAY",
         startsAt: { gte: monthStartUTC },
-        source: { in: ["META_ADS", "GOOGLE_ADS"] },
+        source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] },
       },
       _sum: { value: true },
     });
@@ -769,7 +769,9 @@ export default async function CockpitPage({
         bucket: "DAY",
         metric: "spend",
         startsAt: { gte: campaignStartUTC },
-        source: { in: ["META_ADS", "GOOGLE_ADS"] },
+        // Inclui MANUAL: investimento de midia lancado a mao (/api/investments)
+        // tem que somar junto com Meta/Google, senao ROAS/CAC ficam inflados.
+        source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] },
       },
       _sum: { value: true },
     });
@@ -778,9 +780,14 @@ export default async function CockpitPage({
     // tabela MetricSample nao existe ainda
   }
 
-  // CAC e ROAS calculados do estado atual
-  const cacAtual = salesCount > 0 ? spendCampaignTotal / salesCount : 0;
-  const roasAtual = spendCampaignTotal > 0 ? salesTotal / spendCampaignTotal : 0;
+  // Investimento TOTAL da campanha = midia (Meta+Google+manual) + custos de
+  // producao (LP/criativos/outros). E o denominador honesto pro ROAS/CAC e
+  // bate com o quadro "Resultados" da aba analitica (getCampaignResults).
+  const totalInvestmentCampaign = spendCampaignTotal + productionCostsTotal;
+
+  // CAC e ROAS calculados do estado atual (sobre investimento total)
+  const cacAtual = salesCount > 0 ? totalInvestmentCampaign / salesCount : 0;
+  const roasAtual = totalInvestmentCampaign > 0 ? salesTotal / totalInvestmentCampaign : 0;
   // CPL alvo é por LEAD captado. Sem dado de leads isolado ainda (vem do
   // form/RD CRM). Por enquanto usa click_compra como proxy de "lead caro"
   // ou pula essa meta — vou incluir como proxy mesmo (mais util pra mostrar
@@ -948,7 +955,7 @@ export default async function CockpitPage({
               value={mediaInvestment}
               format="currency"
               icon={<WalletIcon size={14} />}
-              hint={mediaInvestmentIsMonth ? "mês a data · Meta + Google" : "hoje · Meta + Google"}
+              hint={mediaInvestmentIsMonth ? "mês a data · Meta + Google + manual" : "hoje · Meta + Google + manual"}
               secondaryValue={totalInvestmentMonth}
               secondaryLabel="no mês"
               secondaryHint={

@@ -4,7 +4,8 @@ const formatBRL = (n: number) =>
   new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(n);
 
 const formatInt = (n: number) => new Intl.NumberFormat("pt-BR").format(n);
@@ -27,6 +28,8 @@ export function ResultadosPanel({ results }: { results: CampaignResults }) {
     salesCount,
     revenue,
     mediaInvestment,
+    mediaMeta,
+    mediaGoogle,
     totalInvestment,
     roas,
     campaignStart,
@@ -89,7 +92,15 @@ export function ResultadosPanel({ results }: { results: CampaignResults }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Stat label="Vendas Totais" value={formatInt(salesCount)} />
         <Stat label="Receita" value={formatBRL(revenue)} valueColor="#30D158" />
-        <Stat label="Investimento Mídia" value={formatBRL(mediaInvestment)} valueColor="#FF9F0A" />
+        <Stat
+          label="Investimento Mídia"
+          value={formatBRL(mediaInvestment)}
+          valueColor="#FF9F0A"
+          breakdown={[
+            { label: "Meta", value: formatBRL(mediaMeta), color: "#0A84FF" },
+            { label: "Google", value: formatBRL(mediaGoogle), color: "#FFD60A" },
+          ]}
+        />
         <Stat label="Investimento Total" value={formatBRL(totalInvestment)} valueColor="#D97757" />
         <Stat label="ROAS" value={roasLabel} valueColor={roasColor} emphasis />
       </div>
@@ -102,11 +113,13 @@ function Stat({
   value,
   valueColor = "var(--fg1)",
   emphasis = false,
+  breakdown,
 }: {
   label: string;
   value: string;
   valueColor?: string;
   emphasis?: boolean;
+  breakdown?: Array<{ label: string; value: string; color: string }>;
 }) {
   return (
     <div
@@ -138,6 +151,31 @@ function Stat({
       >
         {value}
       </span>
+      {breakdown && breakdown.length > 0 && (
+        <div className="flex flex-col gap-0.5 mt-1">
+          {breakdown.map((b) => (
+            <span
+              key={b.label}
+              className="flex items-center justify-between"
+              style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--fg2)" }}
+            >
+              <span className="flex items-center gap-1.5">
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 2,
+                    background: b.color,
+                    display: "inline-block",
+                  }}
+                />
+                {b.label}
+              </span>
+              <span style={{ color: "var(--fg1)", fontWeight: 600 }}>{b.value}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
