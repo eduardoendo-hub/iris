@@ -53,11 +53,49 @@ function listMigrationNames(dir: string): string[] {
     .sort();
 }
 
+// DDL padrao do Prisma p/ a tabela de controle. IF NOT EXISTS = idempotente.
+// Necessario p/ o BASELINE: o banco de prod nunca teve _prisma_migrations
+// (schema foi criado via db push / rota antiga de SQL cru), entao a 1a vez
+// que rodamos aqui precisamos materializar a tabela antes de registrar nada.
+async function ensureMigrationsTable(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
+      "id" VARCHAR(36) NOT NULL,
+      "checksum" VARCHAR(64) NOT NULL,
+      "finished_at" TIMESTAMPTZ,
+      "migration_name" VARCHAR(255) NOT NULL,
+      "logs" TEXT,
+      "rolled_back_at" TIMESTAMPTZ,
+      "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+      "applied_steps_count" INTEGER NOT NULL DEFAULT 0,
+      CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id")
+    )`);
+}
+
+// Le os nomes ja registrados. Tolera a tabela ausente (42P01) retornando
+// vazio — assim o GET dry-run continua read-only mesmo num banco sem baseline.
 async function appliedNames(): Promise<Set<string>> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(
-    `SELECT migration_name FROM "_prisma_migrations"`,
-  );
-  return new Set(rows.map((r) => r.migration_name));
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(
+      `SELECT migration_name FROM "_prisma_migrations"`,
+    );
+    return new Set(rows.map((r) => r.migration_name));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/_prisma_migrations/.test(msg) && /(does not exist|42P01)/.test(msg)) {
+      return new Set();
+    }
+    throw err;
+  }
+}
+
+// Registra uma migracao no controle SEM rodar o SQL. Usado no baseline p/
+// marcar as historicas (schema ja existe no banco) como aplicadas.
+async function recordMigration(name: string, checksum: string, steps: number): Promise<void> {
+  await prisma.$executeRaw`
+    INSERT INTO "_prisma_migrations"
+      (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
+    VALUES (${randomUUID()}, ${checksum}, now(), ${name}, now(), ${steps})`;
 }
 
 // Remove comentários de linha (-- ...) e quebra em statements por ';'.
@@ -83,7 +121,12 @@ export async function GET(req: NextRequest) {
     const all = listMigrationNames(dir);
     const applied = await appliedNames();
     const pending = all.filter((n) => !applied.has(n));
-    return NextResponse.json({ total: all.length, applied: all.length - pending.length, pending });
+    return NextResponse.json({
+      total: all.length,
+      applied: all.length - pending.length,
+      pending,
+      hasMigrationsTable: applied.size > 0,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "introspect_failed", message: msg }, { status: 500 });
@@ -93,10 +136,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  // ?baselineUpTo=<migration_name>: migracoes pendentes com nome <= esse valor
+  // sao apenas REGISTRADAS (sem rodar SQL), porque o schema ja existe no banco.
+  // As com nome > esse valor rodam de verdade. Sem o param = tudo roda de verdade.
+  const baselineUpTo = new URL(req.url).searchParams.get("baselineUpTo") || "";
+
   let dir: string;
   let pending: string[];
   try {
     dir = migrationsDir();
+    await ensureMigrationsTable();
     const all = listMigrationNames(dir);
     const applied = await appliedNames();
     pending = all.filter((n) => !applied.has(n));
@@ -110,6 +159,23 @@ export async function POST(req: NextRequest) {
   for (const name of pending) {
     const sql = fs.readFileSync(path.join(dir, name, "migration.sql"), "utf8");
     const checksum = createHash("sha256").update(sql).digest("hex");
+
+    // Baseline: so registra, nao executa (schema historico ja esta no banco).
+    if (baselineUpTo && name <= baselineUpTo) {
+      try {
+        await recordMigration(name, checksum, 0);
+        results.push({ migration: name, statements: 0, status: "baselined" });
+        continue;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        results.push({ migration: name, statements: 0, status: `FAILED: ${msg}` });
+        return NextResponse.json(
+          { status: "aborted", baselinedNow: results.filter((r) => r.status === "baselined").length, results },
+          { status: 500 },
+        );
+      }
+    }
+
     const statements = splitStatements(sql);
     try {
       await prisma.$transaction(async (tx) => {
@@ -132,5 +198,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ status: "ok", appliedNow: results.length, results });
+  const baselined = results.filter((r) => r.status === "baselined").length;
+  const applied = results.filter((r) => r.status === "applied").length;
+  return NextResponse.json({ status: "ok", baselinedNow: baselined, appliedNow: applied, results });
 }
