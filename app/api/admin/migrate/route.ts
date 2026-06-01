@@ -1,123 +1,136 @@
 /**
- * POST /api/admin/migrate — aplica a migration inicial diretamente via Prisma.
+ * /api/admin/migrate — aplica migrações Prisma PENDENTES sem o CLI.
  *
- * Usado quando o `prisma migrate deploy` no boot do container nao funciona
- * (deps faltando) e o terminal do Coolify nao conecta. Le o SQL do arquivo
- * de migration e executa statement-por-statement via $executeRawUnsafe.
+ * Existe porque o build standalone do Next não traz o prisma CLI e o deploy no
+ * Coolify não roda `prisma migrate deploy` automaticamente (ver Dockerfile).
+ * Quando não há acesso ao terminal do container, esta rota aplica as migrações
+ * em ./prisma/migrations que ainda NÃO estão em _prisma_migrations, usando o
+ * cliente Prisma já presente no runtime.
  *
- * Protegido por header X-Admin-Secret = process.env.IRIS_WEBHOOK_SECRET
- * (reusa o secret ja configurado).
+ * SEGURO p/ rodar repetidamente: só toca o que está pendente e registra em
+ * _prisma_migrations com o checksum correto (compatível com o CLI depois).
+ * NÃO re-executa migrações de dados já aplicadas (evita dupla aplicação de DML).
  *
- * Idempotente: cada CREATE TABLE/TYPE/INDEX usa IF NOT EXISTS quando possivel,
- * e errors de "already exists" sao logados como warning, nao falham a request.
+ * Auth: header X-Cron-Secret = CRON_SECRET  (ou X-Admin-Secret = IRIS_WEBHOOK_SECRET)
+ * GET  → dry-run: lista aplicadas vs pendentes
+ * POST → aplica as pendentes, cada uma numa transação atômica
  */
 import fs from "node:fs";
 import path from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function authorized(req: NextRequest): boolean {
-  const secret = process.env.IRIS_WEBHOOK_SECRET;
-  if (!secret) return false;
-  const provided = req.headers.get("x-admin-secret") || "";
-  return provided === secret;
+  const cron = process.env.CRON_SECRET;
+  const admin = process.env.IRIS_WEBHOOK_SECRET;
+  const xc = req.headers.get("x-cron-secret") || "";
+  const xa = req.headers.get("x-admin-secret") || "";
+  return (!!cron && xc === cron) || (!!admin && xa === admin);
 }
 
-function findAllMigrationFiles(): { name: string; path: string }[] {
-  // O Dockerfile copia prisma/ para o root do runtime
+function migrationsDir(): string {
   const candidates = [
     path.join(process.cwd(), "prisma", "migrations"),
     path.join("/app", "prisma", "migrations"),
   ];
   for (const dir of candidates) {
     try {
-      const items = fs.readdirSync(dir);
-      // pega todas as pastas de migration (timestamp_name) ordenadas
-      const migrations = items
-        .filter((i) => /^\d{14}_/.test(i))
-        .sort()
-        .map((name) => ({
-          name,
-          path: path.join(dir, name, "migration.sql"),
-        }))
-        .filter((m) => fs.existsSync(m.path));
-      if (migrations.length > 0) return migrations;
+      if (fs.existsSync(dir) && fs.readdirSync(dir).some((i) => /^\d{14}_/.test(i))) return dir;
     } catch {}
   }
-  return [];
+  return candidates[0];
 }
 
+function listMigrationNames(dir: string): string[] {
+  return fs
+    .readdirSync(dir)
+    .filter((i) => /^\d{14}_/.test(i) && fs.existsSync(path.join(dir, i, "migration.sql")))
+    .sort();
+}
+
+async function appliedNames(): Promise<Set<string>> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(
+    `SELECT migration_name FROM "_prisma_migrations"`,
+  );
+  return new Set(rows.map((r) => r.migration_name));
+}
+
+// Remove comentários de linha (-- ...) e quebra em statements por ';'.
+// Vale só p/ DDL/DML simples (sem stored procedures com ';' interno).
 function splitStatements(sql: string): string[] {
-  // 1) Remove linhas de comentario SQL (--...) — Prisma gera "-- CreateTable" antes de cada CREATE
-  const cleaned = sql
+  const noComments = sql
     .split("\n")
-    .filter((line) => !line.trim().startsWith("--"))
+    .map((line) => {
+      const idx = line.indexOf("--");
+      return idx >= 0 ? line.slice(0, idx) : line;
+    })
     .join("\n");
-  // 2) Split por ';' (com whitespace/newline opcional). Funciona pra DDL puro
-  //    (sem stored procedures com ';' interno). Nossa migration so tem CREATE/ALTER simples.
-  return cleaned
-    .split(/;\s*(?:\n|$)/)
+  return noComments
+    .split(";")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
 
-export async function POST(req: NextRequest) {
-  if (!authorized(req)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+export async function GET(req: NextRequest) {
+  if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  try {
+    const dir = migrationsDir();
+    const all = listMigrationNames(dir);
+    const applied = await appliedNames();
+    const pending = all.filter((n) => !applied.has(n));
+    return NextResponse.json({ total: all.length, applied: all.length - pending.length, pending });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "introspect_failed", message: msg }, { status: 500 });
   }
-
-  const migrations = findAllMigrationFiles();
-  if (migrations.length === 0) {
-    return NextResponse.json(
-      { error: "migration_files_not_found", searched: ["prisma/migrations/*/migration.sql"] },
-      { status: 500 }
-    );
-  }
-
-  type StmtResult = { idx: number; status: "ok" | "skipped" | "error"; preview: string; error?: string };
-  type MigResult = { migration: string; total: number; ok: number; skipped: number; errors: number; errorDetails?: StmtResult[] };
-
-  const migResults: MigResult[] = [];
-
-  for (const mig of migrations) {
-    const sql = fs.readFileSync(mig.path, "utf8");
-    const statements = splitStatements(sql);
-    const results: StmtResult[] = [];
-    for (let i = 0; i < statements.length; i++) {
-      const stmt = statements[i];
-      const preview = stmt.slice(0, 80).replace(/\s+/g, " ");
-      try {
-        await prisma.$executeRawUnsafe(stmt);
-        results.push({ idx: i, status: "ok", preview });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (/already exists|duplicate/i.test(msg)) {
-          results.push({ idx: i, status: "skipped", preview, error: msg.slice(0, 200) });
-        } else {
-          results.push({ idx: i, status: "error", preview, error: msg.slice(0, 500) });
-        }
-      }
-    }
-    const ok = results.filter((r) => r.status === "ok").length;
-    const skipped = results.filter((r) => r.status === "skipped").length;
-    const errors = results.filter((r) => r.status === "error").length;
-    migResults.push({
-      migration: mig.name,
-      total: statements.length,
-      ok, skipped, errors,
-      errorDetails: errors > 0 ? results.filter((r) => r.status === "error") : undefined,
-    });
-  }
-
-  return NextResponse.json({ migrations: migResults });
 }
 
-export async function GET() {
-  return NextResponse.json({
-    info: "POST com header X-Admin-Secret para aplicar todas migrations",
-    migrations: findAllMigrationFiles().map((m) => m.name),
-  });
+export async function POST(req: NextRequest) {
+  if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  let dir: string;
+  let pending: string[];
+  try {
+    dir = migrationsDir();
+    const all = listMigrationNames(dir);
+    const applied = await appliedNames();
+    pending = all.filter((n) => !applied.has(n));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "introspect_failed", message: msg }, { status: 500 });
+  }
+
+  const results: Array<{ migration: string; statements: number; status: string }> = [];
+
+  for (const name of pending) {
+    const sql = fs.readFileSync(path.join(dir, name, "migration.sql"), "utf8");
+    const checksum = createHash("sha256").update(sql).digest("hex");
+    const statements = splitStatements(sql);
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const stmt of statements) {
+          await tx.$executeRawUnsafe(stmt);
+        }
+        await tx.$executeRaw`
+          INSERT INTO "_prisma_migrations"
+            (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
+          VALUES (${randomUUID()}, ${checksum}, now(), ${name}, now(), ${statements.length})`;
+      });
+      results.push({ migration: name, statements: statements.length, status: "applied" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      results.push({ migration: name, statements: statements.length, status: `FAILED: ${msg}` });
+      return NextResponse.json(
+        { status: "aborted", appliedNow: results.filter((r) => r.status === "applied").length, results },
+        { status: 500 },
+      );
+    }
+  }
+
+  return NextResponse.json({ status: "ok", appliedNow: results.length, results });
 }
