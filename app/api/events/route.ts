@@ -42,6 +42,9 @@ const ALLOWED_ORIGINS = new Set([
   // ADV-IA
   "https://advia.technowhub.ai",         // canonico (LP servida aqui)
   "https://advia.impacta.com.br",        // redirect -> technowhub
+  // MBA Academy AI Master (Experience Labs)
+  "https://mbaacademy.technowhub.ai",    // canonico (LP servida aqui)
+  "https://mbaacademy.impacta.com.br",   // redirect -> technowhub
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev

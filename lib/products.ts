@@ -119,6 +119,20 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     engagedCheckoutSharedIds: ["4jtt6rr7ti"],
   },
 
+  "mba-academy": {
+    slug: "mba-academy",
+    name: "MBA Academy AI Master",
+    // LP servida em mbaacademy.technowhub.ai. Oferta interna: aluno do MBA
+    // compra o Impacta Academy AI Master e abona as 64h de Experience Labs.
+    lpUrl: "https://mbaacademy.technowhub.ai",
+    // SEM midia paga (Meta/Google) — distribuicao organica/secretaria. Por isso
+    // nao tem metaCampaignFilter/googleCampaignFilter (nada de spend pra atribuir).
+    campaignSlug: "mba-academy-ai-master",
+    // Engaged checkout SharedID — extraido do BUY_URL da LP:
+    //   https://impacta.site.engaged.com.br/p/checkout/w4uz6kh4cj
+    engagedCheckoutSharedIds: ["w4uz6kh4cj"],
+  },
+
   // Future products — descomentar quando entrarem:
   //
   // "direito5": {
