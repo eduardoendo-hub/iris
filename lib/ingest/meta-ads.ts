@@ -268,6 +268,21 @@ export async function ingestMetaAds(opts: {
   const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
   const { productSlug } = opts;
 
+  // Sem metaCampaignFilter/metaAdNameFilter, fetchInsights cai em level=account
+  // e soma a conta INTEIRA (multi-produto) neste productSlug. Produtos sem
+  // midia paga (distribuicao organica) nao tem spend pra atribuir -> pula.
+  const productCfg = getProductConfig(productSlug);
+  if (!productCfg?.metaCampaignFilter && !productCfg?.metaAdNameFilter) {
+    return {
+      productSlug,
+      daysFetched: 0,
+      samplesUpserted: 0,
+      details: [],
+      skipped: true,
+      skipReason: "no_paid_media_filter",
+    };
+  }
+
   // Portao de ingestao: sem campanha ATIVA dentro da janela -> pula gravacao.
   const gate = await getIngestGate(productSlug);
   if (!opts.force && !gate.ingest) {

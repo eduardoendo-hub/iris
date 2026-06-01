@@ -104,6 +104,21 @@ export async function ingestGoogleAds(opts: {
   const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
   const { productSlug } = opts;
 
+  // Sem googleCampaignFilter o GAQL roda sem filtro de nome e soma TODAS as
+  // campanhas do customer (multi-produto) neste productSlug. Produto sem
+  // midia paga (distribuicao organica) nao tem spend pra atribuir -> pula.
+  const productCfg = getProductConfig(productSlug);
+  if (!productCfg?.googleCampaignFilter) {
+    return {
+      productSlug,
+      daysFetched: 0,
+      samplesUpserted: 0,
+      details: [],
+      skipped: true,
+      skipReason: "no_paid_media_filter",
+    };
+  }
+
   // Portao de ingestao (Feature A): igual ao Meta — sem campanha ATIVA na
   // janela, pula. Encerrar a campanha congela os dados.
   const gate = await getIngestGate(productSlug);
