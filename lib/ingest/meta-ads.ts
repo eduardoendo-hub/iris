@@ -22,6 +22,7 @@
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
 import { spDayBucketFromYMD } from "@/lib/time-buckets";
+import { getIngestGate, isYMDInWindow } from "@/lib/campaigns";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -247,18 +248,38 @@ export type MetaIngestResult = {
   daysFetched: number;
   samplesUpserted: number;
   details: Array<{ date: string; spend: number; impressions: number; clicks: number }>;
+  skipped?: boolean;
+  skipReason?: string;
 };
 
 /**
  * Roda o ingest pro product/slug informado.
  * Upserta MetricSample por (productSlug, META_ADS, metric, bucket=DAY, startsAt).
+ *
+ * GATING (Feature A): so grava enquanto existe campanha ATIVA cuja janela
+ * cobre hoje. Encerrar a campanha congela os dados (nenhum bucket novo entra).
+ * `force` ignora o portao — usar so pra backfill/debug manual.
  */
 export async function ingestMetaAds(opts: {
   productSlug: string;
   days?: number;
+  force?: boolean;
 }): Promise<MetaIngestResult> {
   const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
   const { productSlug } = opts;
+
+  // Portao de ingestao: sem campanha ATIVA dentro da janela -> pula gravacao.
+  const gate = await getIngestGate(productSlug);
+  if (!opts.force && !gate.ingest) {
+    return {
+      productSlug,
+      daysFetched: 0,
+      samplesUpserted: 0,
+      details: [],
+      skipped: true,
+      skipReason: gate.reason,
+    };
+  }
 
   const insights = await fetchInsights(days, productSlug);
 
@@ -267,6 +288,9 @@ export async function ingestMetaAds(opts: {
 
   for (const ins of insights) {
     if (!ins.date_start) continue;
+    // Clampa buckets fora da janela da campanha ativa (evita poluir a turma
+    // anterior/posterior quando o cron pega "ultimos N dias" no virar da turma).
+    if (!opts.force && gate.window && !isYMDInWindow(ins.date_start, gate.window)) continue;
     const startsAt = ymdToBucketStart(ins.date_start);
     const spend = Number(ins.spend ?? 0);
     const impressions = Number(ins.impressions ?? 0);

@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { spDayBucketFromInstant } from "@/lib/time-buckets";
+import { getIngestGate } from "@/lib/campaigns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,10 +116,18 @@ export async function POST(req: NextRequest) {
   const at = data.ts ?? new Date();
   const bucket = spDayBucketFromInstant(at);
 
+  // Portao de ingestao (Feature A): se a campanha do produto esta encerrada
+  // (ou nao ha ativa na janela), NAO incrementa o contador KPI — os numeros
+  // ficam congelados. VisitEvent (forense, append-only) ainda eh gravado.
+  const gate = await getIngestGate(data.product_slug, at);
+
   try {
     // (1) MetricSample — agregado por dia (rapido pro cockpit KPI cards).
     // Upsert: increment contador do dia atual pra esse (productSlug, evento).
-    const sample = await prisma.metricSample.upsert({
+    // So grava se o portao estiver aberto (campanha ativa dentro da janela).
+    let sample: { metric: string; value: unknown } | null = null;
+    if (gate.ingest) {
+      sample = await prisma.metricSample.upsert({
       where: {
         productSlug_source_metric_bucket_startsAt: {
           productSlug: data.product_slug,
@@ -145,7 +154,8 @@ export async function POST(req: NextRequest) {
       update: {
         value: { increment: 1 },
       },
-    });
+      });
+    }
 
     // (2) VisitEvent — append granular pra analise por canal (UTM).
     // Best-effort: nao falha o request se VisitEvent quebrar (legado funciona
@@ -176,7 +186,14 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { status: "ok", metric: sample.metric, value: Number(sample.value), visitEventId },
+      {
+        status: "ok",
+        counted: gate.ingest,
+        ...(gate.ingest ? {} : { skipReason: gate.reason }),
+        metric: sample?.metric ?? data.event_name,
+        value: sample ? Number(sample.value) : 0,
+        visitEventId,
+      },
       { status: 200, headers }
     );
   } catch (err) {

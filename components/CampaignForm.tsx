@@ -36,7 +36,24 @@ export type CampaignInitial = {
   marketingPlan: string | null;
   marketingPlanFilename: string | null;
   isActive: boolean;
+  status?: "DRAFT" | "ACTIVE" | "ENDED";
+  /** SharedIDs do checkout Engaged desta turma (1 por linha no form). */
+  engagedCheckoutSharedIds?: string[];
 };
+
+/** Textarea (1 por linha) -> array limpo, sem vazios nem duplicados. */
+function linesToArray(s: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of s.split("\n")) {
+    const v = raw.trim();
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  }
+  return out;
+}
 
 function isoToInputDate(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -75,6 +92,10 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
     initial?.marketingPlanFilename ?? ""
   );
   const [isActive, setIsActive] = useState(initial?.isActive ?? false);
+  const [engagedSharedIds, setEngagedSharedIds] = useState(
+    (initial?.engagedCheckoutSharedIds ?? []).join("\n")
+  );
+  const status = initial?.status ?? (initial?.isActive ? "ACTIVE" : "DRAFT");
 
   // Custos totais calculados
   const num = (s: string): number => (s === "" ? 0 : Number(s) || 0);
@@ -106,6 +127,7 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
     body.goalCpl = nullable(goalCpl);
     body.marketingPlan = marketingPlan === "" ? null : marketingPlan;
     body.marketingPlanFilename = marketingPlanFilename === "" ? null : marketingPlanFilename;
+    body.engagedCheckoutSharedIds = linesToArray(engagedSharedIds);
 
     try {
       const url = editing
@@ -159,6 +181,81 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
     }
   }
 
+  // FEATURE A — Encerrar campanha: congela frozenResults e corta a ingestao
+  // (Meta/Google/Engaged/eventos param de alimentar). Acao irreversivel pela
+  // UI (reativar limpa o snapshot via ?action=activate, mas o usuario nao
+  // deve fazer isso por engano — por isso o confirm forte).
+  async function handleEnd() {
+    if (!editing) return;
+    if (
+      !confirm(
+        `Encerrar "${name}"?\n\nIsto CONGELA os números atuais e PARA de registrar dados novos (Meta, Google, Engaged, eventos). Use isto quando a turma terminar.`
+      )
+    )
+      return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/campaigns/${initial!.id}?action=end`, {
+        method: "PATCH",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.message || json.error || "Falha ao encerrar");
+        setSubmitting(false);
+        return;
+      }
+      router.refresh();
+      setSubmitting(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setSubmitting(false);
+    }
+  }
+
+  // FEATURE B — Clonar pra nova turma: encerra a origem (se ativa), cria uma
+  // nova campanha herdando metas/custos/LP, com nova janela e novo sharedId
+  // do Engaged. Os indicadores "zeram" porque a janela nova comeca vazia.
+  async function handleClone() {
+    if (!editing) return;
+    const newSlug = prompt("Slug da nova turma (ex: advia-jul26):", `${slug}-v2`);
+    if (!newSlug) return;
+    const newName = prompt("Nome da nova turma:", `${name} — nova turma`);
+    if (!newName) return;
+    const sharedRaw = prompt(
+      "SharedID(s) do checkout Engaged da nova turma (1 por linha, opcional):",
+      ""
+    );
+    const sharedIds = sharedRaw ? linesToArray(sharedRaw) : [];
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/campaigns/clone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromSlug: slug,
+          slug: newSlug.trim(),
+          name: newName.trim(),
+          engagedCheckoutSharedIds: sharedIds,
+          activate: true,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.message || json.error || "Falha ao clonar");
+        setSubmitting(false);
+        return;
+      }
+      const createdId = json?.campaign?.id as string | undefined;
+      router.push(createdId ? `/admin/campaigns/${createdId}` : "/admin/campaigns");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setSubmitting(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {error && (
@@ -167,6 +264,61 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
           style={{ background: "rgba(236,96,136,0.15)", color: "#EC6088", fontSize: 12 }}
         >
           {error}
+        </div>
+      )}
+
+      {editing && (
+        <div
+          className="flex items-center justify-between flex-wrap gap-3 rounded-md px-3 py-2.5"
+          style={{
+            background: "var(--cockpit-card-strong)",
+            border: "1px solid var(--cockpit-border)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 11, color: "var(--fg2)", fontWeight: 600 }}>
+              Status:
+            </span>
+            <StatusBadge status={status} />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClone}
+              disabled={submitting}
+              style={{
+                fontSize: 12,
+                padding: "6px 14px",
+                borderRadius: 6,
+                background: "transparent",
+                border: "1px solid var(--cockpit-border-strong)",
+                color: "var(--fg1)",
+                fontWeight: 600,
+                cursor: submitting ? "not-allowed" : "pointer",
+              }}
+            >
+              Clonar nova turma
+            </button>
+            {status === "ACTIVE" && (
+              <button
+                type="button"
+                onClick={handleEnd}
+                disabled={submitting}
+                style={{
+                  fontSize: 12,
+                  padding: "6px 14px",
+                  borderRadius: 6,
+                  background: "transparent",
+                  border: "1px solid #E0A800",
+                  color: "#E0A800",
+                  fontWeight: 600,
+                  cursor: submitting ? "not-allowed" : "pointer",
+                }}
+              >
+                Encerrar campanha
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -244,6 +396,22 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
         </div>
       </Section>
 
+      <Section title="Engaged / Checkout">
+        <Field
+          label="SharedID(s) do checkout Engaged"
+          hint="1 por linha. Muda a cada turma (URL nova). O webhook usa isto pra ligar a venda à campanha certa."
+        >
+          <textarea
+            value={engagedSharedIds}
+            onChange={(e) => setEngagedSharedIds(e.target.value)}
+            rows={3}
+            placeholder="ex: 4jtt6rr7ti"
+            {...inputProps}
+            style={{ ...inputProps.style, fontFamily: "var(--font-mono)", fontSize: 12 }}
+          />
+        </Field>
+      </Section>
+
       <Section title="Plano de marketing">
         <Field label="Nome do arquivo (opcional)" hint="ex: plano-maio-2026.docx">
           <input type="text" value={marketingPlanFilename} onChange={(e) => setMarketingPlanFilename(e.target.value)} {...inputProps} />
@@ -317,6 +485,31 @@ const inputProps = {
     outline: "none",
   } as React.CSSProperties,
 };
+
+function StatusBadge({ status }: { status: "DRAFT" | "ACTIVE" | "ENDED" }) {
+  const map = {
+    ACTIVE: { label: "Ativa", bg: "rgba(48,209,88,0.15)", fg: "#30D158" },
+    ENDED: { label: "Encerrada", bg: "rgba(142,142,147,0.18)", fg: "var(--fg2)" },
+    DRAFT: { label: "Rascunho", bg: "rgba(94,132,241,0.15)", fg: "var(--brand)" },
+  } as const;
+  const s = map[status];
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 800,
+        padding: "2px 8px",
+        borderRadius: 4,
+        background: s.bg,
+        color: s.fg,
+        textTransform: "uppercase",
+        letterSpacing: "0.05em",
+      }}
+    >
+      {s.label}
+    </span>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

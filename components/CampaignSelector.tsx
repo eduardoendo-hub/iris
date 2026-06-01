@@ -15,12 +15,29 @@
 import Link from "next/link";
 import { useState } from "react";
 
+export type CampaignStatus = "DRAFT" | "ACTIVE" | "ENDED";
+
 export type CampaignOption = {
   slug: string;
   name: string;
   productSlug: string;
   isActive: boolean;
+  status: CampaignStatus;
 };
+
+type FilterMode = "active" | "ended" | "all";
+
+const FILTERS: { key: FilterMode; label: string }[] = [
+  { key: "active", label: "Ativas" },
+  { key: "ended", label: "Encerradas" },
+  { key: "all", label: "Todas" },
+];
+
+function matchesFilter(c: CampaignOption, mode: FilterMode): boolean {
+  if (mode === "all") return true;
+  if (mode === "active") return c.status === "ACTIVE";
+  return c.status === "ENDED";
+}
 
 export function CampaignSelector({
   currentSlug,
@@ -34,11 +51,19 @@ export function CampaignSelector({
   basePath?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<FilterMode>("all");
   if (campaigns.length === 0) return null;
   const current =
     campaigns.find((c) => c.slug === currentSlug) ??
     campaigns.find((c) => c.isActive) ??
     campaigns[0];
+
+  // Lista filtrada pelo toggle (Ativas / Encerradas / Todas). A campanha
+  // selecionada no momento aparece sempre, mesmo que nao bata com o filtro,
+  // pra nunca "sumir" o item atual do menu.
+  const visibleCampaigns = campaigns.filter(
+    (c) => c.slug === current.slug || matchesFilter(c, filter)
+  );
 
   return (
     <div className="relative">
@@ -107,7 +132,43 @@ export function CampaignSelector({
               boxShadow: "var(--shadow-2)",
             }}
           >
-            {campaigns.map((c) => (
+            {/* Toggle Ativas / Encerradas / Todas */}
+            <div
+              className="flex items-center gap-1 px-2 py-2"
+              style={{ borderBottom: "1px solid var(--cockpit-border)" }}
+            >
+              {FILTERS.map((f) => {
+                const active = filter === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    onClick={() => setFilter(f.key)}
+                    className="flex-1 transition-colors"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: active ? 700 : 500,
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      background: active ? "var(--cockpit-card-strong)" : "transparent",
+                      color: active ? "var(--fg1)" : "var(--fg2)",
+                      border: "1px solid",
+                      borderColor: active ? "var(--cockpit-border-strong)" : "transparent",
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+            {visibleCampaigns.length === 0 && (
+              <div
+                className="px-4 py-3 text-center"
+                style={{ fontSize: 12, color: "var(--fg2)" }}
+              >
+                Nenhuma campanha nesse filtro
+              </div>
+            )}
+            {visibleCampaigns.map((c) => (
               <Link
                 key={c.slug}
                 href={`${basePath}?campaign=${encodeURIComponent(c.slug)}`}
@@ -136,7 +197,7 @@ export function CampaignSelector({
                     {c.slug} · {c.productSlug}
                   </span>
                 </div>
-                {c.isActive && (
+                {c.status === "ACTIVE" && (
                   <span
                     style={{
                       fontSize: 9,
@@ -150,6 +211,22 @@ export function CampaignSelector({
                     }}
                   >
                     ativa
+                  </span>
+                )}
+                {c.status === "ENDED" && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 800,
+                      padding: "1px 6px",
+                      borderRadius: 3,
+                      background: "rgba(142,142,147,0.18)",
+                      color: "var(--fg2)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    encerrada
                   </span>
                 )}
               </Link>

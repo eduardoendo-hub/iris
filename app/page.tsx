@@ -26,6 +26,7 @@ import {
   RevenueIcon,
 } from "@/components/icons";
 import { prisma } from "@/lib/prisma";
+import { getCampaignWindow } from "@/lib/campaigns";
 import {
   MOCK_KPIS,
   MOCK_CHANNELS,
@@ -56,7 +57,7 @@ export default async function CockpitPage({
   try {
     const all = await prisma.campaign.findMany({
       orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
-      select: { slug: true, name: true, productSlug: true, isActive: true },
+      select: { slug: true, name: true, productSlug: true, isActive: true, status: true },
     });
     campaignOptions = filterCampaignsByScope(
       all.map((c) => ({
@@ -64,6 +65,7 @@ export default async function CockpitPage({
         name: c.name,
         productSlug: c.productSlug,
         isActive: c.isActive,
+        status: c.status,
       })),
       accessScope,
     );
@@ -105,6 +107,33 @@ export default async function CockpitPage({
   const kpi = MOCK_KPIS[productKey] ?? MOCK_KPIS["claude-pro"];
   const channels = MOCK_CHANNELS[productKey] ?? [];
   const ctaPositions = MOCK_CTA_POSITION[productKey] ?? [];
+
+  // ────────────────────────────────────────────────────────────────
+  // Campanha selecionada (registro completo) + janela canonica.
+  // Carregada AQUI no topo pra que os agregados de vendas e spend logo
+  // abaixo possam clampar pela janela [startDate, fim) — fim = endedAt ??
+  // endDate. Isso mantem o cockpit consistente com a aba analitica
+  // (getCampaignResults) e congela os numeros de uma campanha encerrada.
+  // ────────────────────────────────────────────────────────────────
+  let activeCampaignEarly: Awaited<ReturnType<typeof prisma.campaign.findFirst>> = null;
+  try {
+    if (selectedCampaignSlug) {
+      activeCampaignEarly = await prisma.campaign.findUnique({
+        where: { slug: selectedCampaignSlug },
+      });
+    } else {
+      activeCampaignEarly = await prisma.campaign.findFirst({
+        where: { productSlug: slug, isActive: true },
+      });
+    }
+  } catch {
+    /* tabela Campaign nao existe ainda */
+  }
+  const campaignWindow = activeCampaignEarly ? getCampaignWindow(activeCampaignEarly) : null;
+  // Filtro de janela reutilizavel pros agregados de Sale (por saleDate).
+  const saleWindowFilter = campaignWindow
+    ? { saleDate: { gte: campaignWindow.sinceUTC, lt: campaignWindow.untilExclusiveUTC } }
+    : {};
 
   // ────────────────────────────────────────────────────────────────
   // KPIs de Captação — leem de MetricSample (GA4/Meta/Google ingest)
@@ -444,7 +473,7 @@ export default async function CockpitPage({
   }> = [];
   try {
     const agg = await prisma.sale.aggregate({
-      where: { productSlug: slug },
+      where: { productSlug: slug, ...saleWindowFilter },
       _sum: { amount: true },
       _count: { _all: true },
     });
@@ -453,7 +482,7 @@ export default async function CockpitPage({
 
     const grouped = await prisma.sale.groupBy({
       by: ["source"],
-      where: { productSlug: slug },
+      where: { productSlug: slug, ...saleWindowFilter },
       _count: { _all: true },
     });
     for (const g of grouped) {
@@ -464,7 +493,7 @@ export default async function CockpitPage({
     }
 
     const raw = await prisma.sale.findMany({
-      where: { productSlug: slug },
+      where: { productSlug: slug, ...saleWindowFilter },
       orderBy: { saleDate: "desc" },
       take: 50,
     });
@@ -559,26 +588,10 @@ export default async function CockpitPage({
     // tabela Sale nao existe ainda
   }
 
-  // ────────────────────────────────────────────────────────────────
-  // Busca a campanha ATIVA antes do bloco de captacao, pra usar
-  // startDate como inicio da janela (em vez de hardcoded 7 dias).
-  // Cada nova turma cria nova campanha — a tabela mostra TUDO da
-  // campanha atual.
-  // ────────────────────────────────────────────────────────────────
-  let activeCampaignEarly: Awaited<ReturnType<typeof prisma.campaign.findFirst>> = null;
-  try {
-    if (selectedCampaignSlug) {
-      activeCampaignEarly = await prisma.campaign.findUnique({
-        where: { slug: selectedCampaignSlug },
-      });
-    } else {
-      activeCampaignEarly = await prisma.campaign.findFirst({
-        where: { productSlug: slug, isActive: true },
-      });
-    }
-  } catch {
-    /* tabela Campaign nao existe ainda */
-  }
+  // activeCampaignEarly + campaignWindow ja foram carregados no topo do
+  // componente (pra clampar vendas/spend pela janela). Aqui so reaproveita
+  // startDate como inicio da janela de captacao (em vez de hardcoded 7 dias).
+  // Cada nova turma cria nova campanha — a tabela mostra TUDO da atual.
   const captacaoFromUTC = activeCampaignEarly?.startDate
     ? new Date(activeCampaignEarly.startDate)
     : (() => {
@@ -759,16 +772,24 @@ export default async function CockpitPage({
     ? activeCampaign.endDate.toISOString().slice(0, 10)
     : "2026-06-07";
 
-  // Spend ACUMULADO total da campanha (desde dia 1)
+  // Spend ACUMULADO total da campanha — clampado pela janela [start, fim).
+  // O limite SUPERIOR (fim = endedAt ?? endDate, exclusivo no dia seguinte)
+  // garante que uma campanha encerrada nao continue somando spend de buckets
+  // novos — espelha getCampaignResults da aba analitica.
   let spendCampaignTotal = 0;
   try {
-    const campaignStartUTC = new Date(CAMPAIGN_START_ISO + "T03:00:00.000Z");
+    const campaignStartUTC = campaignWindow
+      ? campaignWindow.sinceUTC
+      : new Date(CAMPAIGN_START_ISO + "T03:00:00.000Z");
     const totalAgg = await prisma.metricSample.aggregate({
       where: {
         productSlug: slug,
         bucket: "DAY",
         metric: "spend",
-        startsAt: { gte: campaignStartUTC },
+        startsAt: {
+          gte: campaignStartUTC,
+          ...(campaignWindow ? { lt: campaignWindow.untilExclusiveUTC } : {}),
+        },
         // Inclui MANUAL: investimento de midia lancado a mao (/api/investments)
         // tem que somar junto com Meta/Google, senao ROAS/CAC ficam inflados.
         source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] },

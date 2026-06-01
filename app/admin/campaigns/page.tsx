@@ -102,15 +102,22 @@ export default async function CampaignsListPage() {
                 {campaigns.map((c) => (
                   <tr key={c.id} style={{ borderTop: "1px solid var(--cockpit-border)", fontSize: 13 }}>
                     <td className="px-4 py-3">
-                      {c.isActive ? (
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: "2px 8px",
-                          borderRadius: 4, background: "rgba(48,209,88,0.15)", color: "#30D158",
-                          textTransform: "uppercase", letterSpacing: "0.05em",
-                        }}>Ativa</span>
-                      ) : (
-                        <span style={{ color: "var(--fg2)", fontSize: 11 }}>—</span>
-                      )}
+                      {(() => {
+                        const st = c.status ?? (c.isActive ? "ACTIVE" : "DRAFT");
+                        const map = {
+                          ACTIVE: { label: "Ativa", bg: "rgba(48,209,88,0.15)", fg: "#30D158" },
+                          ENDED: { label: "Encerrada", bg: "rgba(142,142,147,0.18)", fg: "var(--fg2)" },
+                          DRAFT: { label: "Rascunho", bg: "rgba(94,132,241,0.15)", fg: "var(--brand)" },
+                        } as const;
+                        const s = map[st as keyof typeof map] ?? map.DRAFT;
+                        return (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: "2px 8px",
+                            borderRadius: 4, background: s.bg, color: s.fg,
+                            textTransform: "uppercase", letterSpacing: "0.05em",
+                          }}>{s.label}</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3" style={{ color: "var(--fg1)", fontWeight: 600 }}>
                       {c.name}

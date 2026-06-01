@@ -32,13 +32,14 @@ export default async function AnalyticsPage({
   try {
     const all = await prisma.campaign.findMany({
       orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
-      select: { slug: true, name: true, productSlug: true, isActive: true },
+      select: { slug: true, name: true, productSlug: true, isActive: true, status: true },
     });
     campaignOptions = all.map((c) => ({
       slug: c.slug,
       name: c.name,
       productSlug: c.productSlug,
       isActive: c.isActive,
+      status: c.status,
     }));
   } catch {
     // tabela nao existe ainda

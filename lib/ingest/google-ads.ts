@@ -22,6 +22,7 @@ import { GoogleAdsApi, type Customer } from "google-ads-api";
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
 import { spDayBucketFromYMD } from "@/lib/time-buckets";
+import { getIngestGate, isYMDInWindow } from "@/lib/campaigns";
 
 function loadConfig(productSlug: string) {
   const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
@@ -81,6 +82,8 @@ export type GoogleAdsIngestResult = {
   daysFetched: number;
   samplesUpserted: number;
   details: Array<{ date: string; spend: number; impressions: number; clicks: number }>;
+  skipped?: boolean;
+  skipReason?: string;
 };
 
 type GaqlRow = {
@@ -96,9 +99,25 @@ type GaqlRow = {
 export async function ingestGoogleAds(opts: {
   productSlug: string;
   days?: number;
+  force?: boolean;
 }): Promise<GoogleAdsIngestResult> {
   const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
   const { productSlug } = opts;
+
+  // Portao de ingestao (Feature A): igual ao Meta — sem campanha ATIVA na
+  // janela, pula. Encerrar a campanha congela os dados.
+  const gate = await getIngestGate(productSlug);
+  if (!opts.force && !gate.ingest) {
+    return {
+      productSlug,
+      daysFetched: 0,
+      samplesUpserted: 0,
+      details: [],
+      skipped: true,
+      skipReason: gate.reason,
+    };
+  }
+
   const cfg = loadConfig(productSlug);
 
   // Date range explicito BETWEEN (UNLIKE Meta, LAST_N_DAYS no GAQL NAO
@@ -163,6 +182,8 @@ export async function ingestGoogleAds(opts: {
   const details: GoogleAdsIngestResult["details"] = [];
 
   for (const [date, agg] of byDay.entries()) {
+    // Clampa buckets fora da janela da campanha ativa.
+    if (!opts.force && gate.window && !isYMDInWindow(date, gate.window)) continue;
     const startsAt = spDayBucketFromYMD(date);
     const metrics = [
       { metric: "spend", value: agg.spend, unit: "BRL" },

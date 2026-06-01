@@ -249,6 +249,9 @@ export async function getCampaignResults(opts: {
   const select = {
     startDate: true,
     endDate: true,
+    endedAt: true,
+    status: true,
+    frozenResults: true,
     productionCostLP: true,
     productionCostAds: true,
     productionCostOther: true,
@@ -258,6 +261,9 @@ export async function getCampaignResults(opts: {
     | {
         startDate: Date;
         endDate: Date;
+        endedAt: Date | null;
+        status: "DRAFT" | "ACTIVE" | "ENDED";
+        frozenResults: unknown;
         productionCostLP: unknown;
         productionCostAds: unknown;
         productionCostOther: unknown;
@@ -267,24 +273,56 @@ export async function getCampaignResults(opts: {
     campaign = opts.campaignSlug
       ? await prisma.campaign.findUnique({ where: { slug: opts.campaignSlug }, select })
       : await prisma.campaign.findFirst({
-          where: { productSlug, isActive: true },
+          where: { productSlug, status: "ACTIVE" },
           select,
         });
   } catch {
     campaign = null;
   }
 
+  // CONGELADA: campanha encerrada com snapshot gravado -> retorna ele direto.
+  // Imutavel, barato, imune a mudancas futuras de dados/logica.
+  if (
+    campaign &&
+    campaign.status === "ENDED" &&
+    campaign.frozenResults &&
+    typeof campaign.frozenResults === "object" &&
+    !Array.isArray(campaign.frozenResults)
+  ) {
+    return campaign.frozenResults as unknown as CampaignResults;
+  }
+
   // Datas em YYYY-MM-DD (SP) — usa o date-part cru, igual o cockpit faz.
+  // Fim efetivo = endedAt (encerramento real) ?? endDate (planejado).
   const campaignStart = campaign ? campaign.startDate.toISOString().slice(0, 10) : null;
+  const effectiveEnd = campaign ? (campaign.endedAt ?? campaign.endDate) : null;
   const campaignEnd = campaign ? campaign.endDate.toISOString().slice(0, 10) : null;
   // Instante UTC da meia-noite SP do dia 1, pra filtrar vendas/spend.
   const since = campaignStart ? new Date(`${campaignStart}T03:00:00.000Z`) : null;
+  // Limite SUPERIOR exclusivo: meia-noite SP do dia SEGUINTE ao fim efetivo
+  // (assim o bucket DAY do ultimo dia entra inteiro). Faltava antes -> campanha
+  // encerrada continuava somando dados novos.
+  const until = effectiveEnd
+    ? new Date(
+        new Date(`${effectiveEnd.toISOString().slice(0, 10)}T03:00:00.000Z`).getTime() +
+          24 * 60 * 60 * 1000
+      )
+    : null;
+
+  const saleDateFilter =
+    since || until
+      ? { saleDate: { ...(since ? { gte: since } : {}), ...(until ? { lt: until } : {}) } }
+      : {};
+  const startsAtFilter =
+    since || until
+      ? { startsAt: { ...(since ? { gte: since } : {}), ...(until ? { lt: until } : {}) } }
+      : {};
 
   let salesCount = 0;
   let revenue = 0;
   try {
     const agg = await prisma.sale.aggregate({
-      where: { productSlug, ...(since ? { saleDate: { gte: since } } : {}) },
+      where: { productSlug, ...saleDateFilter },
       _sum: { amount: true },
       _count: { _all: true },
     });
@@ -305,7 +343,7 @@ export async function getCampaignResults(opts: {
         bucket: "DAY",
         metric: "spend",
         source: { in: [...MEDIA_SPEND_SOURCES] },
-        ...(since ? { startsAt: { gte: since } } : {}),
+        ...startsAtFilter,
       },
       _sum: { value: true },
     });

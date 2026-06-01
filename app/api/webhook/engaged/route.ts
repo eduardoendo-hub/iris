@@ -24,8 +24,9 @@ import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { PRODUCTS, type ProductConfig } from "@/lib/products";
+import { PRODUCTS, getProductConfig, type ProductConfig } from "@/lib/products";
 import { promoteSiblingLeadsToPaid } from "@/lib/engaged-dedup";
+import { getCampaignBySharedId } from "@/lib/campaigns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -460,6 +461,13 @@ function pickAmount(p: Parsed): number {
  * + productId(s). Retorna null se nenhum produto configurado bate
  * (geralmente webhook de OUTRO produto da Impacta — MBA, Faculdade, etc).
  */
+/** Extrai o sharedId do checkout Engaged (chave que mapeia a turma). */
+function pickSharedId(p: Parsed): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ck = (p.checkout ?? {}) as Record<string, any>;
+  return typeof ck.sharedId === "string" ? ck.sharedId : null;
+}
+
 function matchProduct(p: Parsed): ProductConfig | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ck = (p.checkout ?? {}) as Record<string, any>;
@@ -705,10 +713,21 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   const status = pickStatus(p);
   const externalId = pickExternalId(p);
 
+  // CAMPANHA/TURMA — resolve pela sharedId do checkout (muda por turma, mora
+  // na Campaign). Da atribuicao exata por turma (independe de data) e habilita
+  // o gate de encerramento (Feature A).
+  const sharedId = pickSharedId(p);
+  const campaign = sharedId ? await getCampaignBySharedId(sharedId) : null;
+
   // FILTRO DE PRODUTO — engaged manda webhooks de TODOS os produtos da
   // Impacta pra mesma URL. Sem filtro, viramos coletor de vendas do MBA,
   // Faculdade, etc. Identifica produto baseado em sharedId + productId.
-  const matchedProduct = matchProduct(p);
+  // Fallback: se a sharedId ja esta numa Campaign mas nao em lib/products.ts
+  // (turma nova criada via clone), resolve o produto pela campanha.
+  let matchedProduct = matchProduct(p);
+  if (!matchedProduct && campaign) {
+    matchedProduct = getProductConfig(campaign.productSlug);
+  }
   if (!matchedProduct) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ck = (p.checkout ?? {}) as Record<string, any>;
@@ -747,6 +766,20 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     };
   }
   const productSlug = matchedProduct.slug;
+  const campaignSlug = campaign?.slug ?? null;
+
+  // GATE (Feature A): turma encerrada -> para de registrar Engaged dessa
+  // sharedId. Honra "ao encerrar, parar de registrar engaged" e mantem o
+  // snapshot congelado fiel (pagamento atrasado da turma velha nao entra).
+  if (campaign && campaign.status === "ENDED") {
+    return {
+      statusCode: 200,
+      body: { status: "ignored", reason: `campaign_ended (${campaign.slug})`, externalId },
+      outcome: "ignored",
+      reason: `campaign_ended:${campaign.slug}`,
+      externalId: externalId || undefined,
+    };
+  }
 
   // Mapeia eventType → status interno. Eventos nao mapeados sao ignorados.
   const eventType = p.eventType ?? null;
@@ -804,6 +837,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
       },
       create: {
         productSlug,
+        campaignSlug,
         externalId,
         status: purchaseStatus,
         lastEventType: eventType ?? "",
@@ -820,6 +854,9 @@ export async function processEngagedPayload(rawBody: string): Promise<{
         status: purchaseStatus,
         lastEventType: eventType ?? "",
         eventAt, // ultimo evento real do Engaged (nao save time)
+        // Carimba a campanha se ainda nao tinha (evento .paid pode resolver
+        // a turma que o lead_captured nao trouxe).
+        ...(campaignSlug ? { campaignSlug } : {}),
         // So atualiza dados do cliente se o novo payload trouxe (evita
         // sobrescrever name/email/phone com null vindo de evento parcial)
         ...(customerName ? { customerName } : {}),
@@ -952,6 +989,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
 
   const saleData = {
     productSlug,
+    campaignSlug,
     source: "ENGAGED" as const,
     customerName,
     customerEmail,

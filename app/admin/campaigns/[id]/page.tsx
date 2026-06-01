@@ -43,6 +43,8 @@ export default async function EditCampaignPage({
     marketingPlan: c.marketingPlan,
     marketingPlanFilename: c.marketingPlanFilename,
     isActive: c.isActive,
+    status: c.status,
+    engagedCheckoutSharedIds: c.engagedCheckoutSharedIds,
   };
 
   return (

@@ -9,12 +9,17 @@
  *
  * Tambem aceita acao via query:
  *   PATCH ?action=activate → torna ativa (desativa as outras do mesmo produto)
- *   PATCH ?action=deactivate → desativa
+ *   PATCH ?action=deactivate → pausa (volta pra DRAFT, sem congelar)
+ *   PATCH ?action=end → ENCERRA (Feature A): status=ENDED, endedAt=now,
+ *                       congela frozenResults e corta ingestao Meta/Google/
+ *                       Engaged/eventos dessa campanha.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkAdminAuth } from "@/lib/admin-auth";
+import { getCampaignResults } from "@/lib/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +57,8 @@ const CampaignUpdate = z.object({
   marketingPlan: nullableString,
   marketingPlanFilename: nullableString,
   isActive: z.boolean().optional(),
+  // SharedIDs do checkout Engaged desta turma (1 por linha no form, array aqui).
+  engagedCheckoutSharedIds: z.array(z.string().min(1)).optional(),
 });
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -74,18 +81,53 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const url = new URL(req.url);
   const action = url.searchParams.get("action");
 
-  // Action shortcuts: activate/deactivate
-  if (action === "activate" || action === "deactivate") {
+  // Action shortcuts: activate/deactivate/end
+  if (action === "activate" || action === "deactivate" || action === "end") {
     const existing = await prisma.campaign.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
     if (action === "deactivate") {
+      // Pausa: tira de ATIVA mas NAO congela (volta pra DRAFT). Pra encerrar
+      // de vez (congelar + cortar ingestao) use action=end.
       const c = await prisma.campaign.update({
         where: { id },
-        data: { isActive: false },
+        data: { isActive: false, status: "DRAFT" },
       });
       return NextResponse.json({ status: "deactivated", campaign: c });
     }
-    // activate: desativa as outras do mesmo produto + ativa essa
+
+    if (action === "end") {
+      // FEATURE A — Encerrar campanha:
+      //   1. Marca endedAt=now (status segue ACTIVE temporariamente) pra que
+      //      getCampaignResults use NOW como limite superior da janela.
+      //   2. Calcula o snapshot dos resultados (live, dentro da janela).
+      //   3. Grava status=ENDED + isActive=false + frozenResults.
+      // A partir daqui crons/eventos/webhook param de gravar nessa campanha.
+      const endedAt = new Date();
+      await prisma.campaign.update({ where: { id }, data: { endedAt } });
+      let frozen: unknown = null;
+      try {
+        frozen = await getCampaignResults({
+          productSlug: existing.productSlug,
+          campaignSlug: existing.slug,
+        });
+      } catch (e) {
+        console.error("[campaigns:end] falha ao calcular frozenResults:", e);
+      }
+      const c = await prisma.campaign.update({
+        where: { id },
+        data: {
+          status: "ENDED",
+          isActive: false,
+          endedAt,
+          ...(frozen ? { frozenResults: frozen as object } : {}),
+        },
+      });
+      return NextResponse.json({ status: "ended", campaign: c });
+    }
+
+    // activate: desativa as outras do mesmo produto + ativa essa.
+    // Reabrir uma ENDED limpa endedAt/frozenResults (volta a alimentar).
     await prisma.$transaction([
       prisma.campaign.updateMany({
         where: {
@@ -93,9 +135,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           isActive: true,
           NOT: { id },
         },
-        data: { isActive: false },
+        data: { isActive: false, status: "DRAFT" },
       }),
-      prisma.campaign.update({ where: { id }, data: { isActive: true } }),
+      prisma.campaign.update({
+        where: { id },
+        data: { isActive: true, status: "ACTIVE", endedAt: null, frozenResults: Prisma.DbNull },
+      }),
     ]);
     const c = await prisma.campaign.findUnique({ where: { id } });
     return NextResponse.json({ status: "activated", campaign: c });
@@ -117,20 +162,24 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
   const data = parsed.data;
   try {
-    // Se mudou pra isActive=true, desativa outras do mesmo produto
+    // Se mudou pra isActive=true, desativa outras do mesmo produto e mantem
+    // status em lockstep (ACTIVE). isActive=false sem encerrar -> DRAFT.
     if (data.isActive === true) {
       const existing = await prisma.campaign.findUnique({ where: { id } });
       if (existing) {
         const productSlug = data.productSlug ?? existing.productSlug;
         await prisma.campaign.updateMany({
           where: { productSlug, isActive: true, NOT: { id } },
-          data: { isActive: false },
+          data: { isActive: false, status: "DRAFT" },
         });
       }
     }
     const campaign = await prisma.campaign.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        ...(data.isActive === true ? { status: "ACTIVE" as const } : {}),
+      },
     });
     return NextResponse.json({ status: "updated", campaign });
   } catch (err) {
