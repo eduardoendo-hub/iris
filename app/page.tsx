@@ -130,9 +130,20 @@ export default async function CockpitPage({
     /* tabela Campaign nao existe ainda */
   }
   const campaignWindow = activeCampaignEarly ? getCampaignWindow(activeCampaignEarly) : null;
-  // Filtro de janela reutilizavel pros agregados de Sale (por saleDate).
+  // Filtros de janela reutilizaveis — clampam cada metrica do cockpit a
+  // [inicio, fim) da turma selecionada. Sem isso uma turma nova (clonada)
+  // herda leads/visitas/engaged da turma anterior, porque essas queries
+  // eram product-wide. EngagedPurchase.campaignSlug fica null em registros
+  // legados, entao filtramos por DATA (eventAt/capturedAt/ts), nao por slug
+  // — mesma estrategia que o saleWindowFilter ja usava pra vendas.
   const saleWindowFilter = campaignWindow
     ? { saleDate: { gte: campaignWindow.sinceUTC, lt: campaignWindow.untilExclusiveUTC } }
+    : {};
+  const leadWindowFilter = campaignWindow
+    ? { capturedAt: { gte: campaignWindow.sinceUTC, lt: campaignWindow.untilExclusiveUTC } }
+    : {};
+  const engagedWindowFilter = campaignWindow
+    ? { eventAt: { gte: campaignWindow.sinceUTC, lt: campaignWindow.untilExclusiveUTC } }
     : {};
 
   // ────────────────────────────────────────────────────────────────
@@ -158,13 +169,23 @@ export default async function CockpitPage({
     const monthStartUTC = new Date(Date.UTC(nowSP.getUTCFullYear(), nowSP.getUTCMonth(), 1, 3, 0, 0));
     const sevenDaysAgoUTC = new Date(todayUTC.getTime() - 6 * 24 * 60 * 60 * 1000);
 
+    // KPIs de captacao = ultimos 7 dias, mas CLAMPADOS a janela da turma:
+    // limite inferior = max(7d atras, inicio da turma); limite superior =
+    // fim da turma. Assim uma turma nova (clonada, janela no futuro) mostra
+    // 0 visitas/cliques em vez de herdar o trafego da turma anterior.
+    const kpiSinceUTC =
+      campaignWindow && campaignWindow.sinceUTC > sevenDaysAgoUTC
+        ? campaignWindow.sinceUTC
+        : sevenDaysAgoUTC;
+    const kpiUntilUTC = campaignWindow ? campaignWindow.untilExclusiveUTC : null;
+
     // Janelas: 7 dias (KPIs de captacao) + hoje (spend dia) + mes (spend mes)
     const samples = await prisma.metricSample.groupBy({
       by: ["metric", "source"],
       where: {
         productSlug: slug,
         bucket: "DAY",
-        startsAt: { gte: sevenDaysAgoUTC },
+        startsAt: { gte: kpiSinceUTC, ...(kpiUntilUTC ? { lt: kpiUntilUTC } : {}) },
       },
       _sum: { value: true },
     });
@@ -238,9 +259,9 @@ export default async function CockpitPage({
     utmSource: string | null; utmMedium: string | null; utmCampaign: string | null;
   }> = [];
   try {
-    leadsCount = await prisma.lead.count({ where: { productSlug: slug } });
+    leadsCount = await prisma.lead.count({ where: { productSlug: slug, ...leadWindowFilter } });
     leadsRecent = await prisma.lead.findMany({
-      where: { productSlug: slug },
+      where: { productSlug: slug, ...leadWindowFilter },
       orderBy: { capturedAt: "desc" },
       take: 20,
       select: {
@@ -283,11 +304,11 @@ export default async function CockpitPage({
     // 1. Coleta TODOS os emails/telefones que ja pagaram (Sale + EngagedPurchase=PAID)
     const [paidEngagedRows, saleRows] = await Promise.all([
       prisma.engagedPurchase.findMany({
-        where: { productSlug: slug, status: "PAID" },
+        where: { productSlug: slug, status: "PAID", ...engagedWindowFilter },
         select: { customerEmail: true, customerPhone: true },
       }),
       prisma.sale.findMany({
-        where: { productSlug: slug },
+        where: { productSlug: slug, ...saleWindowFilter },
         select: { customerEmail: true, customerPhone: true },
       }),
     ]);
@@ -304,7 +325,7 @@ export default async function CockpitPage({
 
     // 2. Engaged leads não-pagos
     const rawEngaged = await prisma.engagedPurchase.findMany({
-      where: { productSlug: slug, status: { not: "PAID" } },
+      where: { productSlug: slug, status: { not: "PAID" }, ...engagedWindowFilter },
       orderBy: { eventAt: "desc" },
       take: 200,
     });
@@ -328,6 +349,7 @@ export default async function CockpitPage({
       rawWa = await prisma.lead.findMany({
         where: {
           productSlug: slug,
+          ...leadWindowFilter,
           OR: [
             { name: { not: null } },
             { email: { not: null } },
@@ -623,10 +645,22 @@ export default async function CockpitPage({
   };
   let captacaoRows: CaptacaoRow[] = [];
   try {
-    const from = captacaoFromUTC;
+    // Clampa a tabela de captacao a janela da turma: limite inferior =
+    // max(janela rolante, inicio da turma); superior = fim da turma. Turma
+    // nova (janela futura) zera em vez de herdar visitas da turma anterior.
+    const from =
+      campaignWindow && campaignWindow.sinceUTC > captacaoFromUTC
+        ? campaignWindow.sinceUTC
+        : captacaoFromUTC;
     const grouped = await prisma.visitEvent.groupBy({
       by: ["utmSource", "utmMedium", "utmCampaign", "utmContent", "utmTerm", "eventName"],
-      where: { productSlug: slug, ts: { gte: from } },
+      where: {
+        productSlug: slug,
+        ts: {
+          gte: from,
+          ...(campaignWindow ? { lt: campaignWindow.untilExclusiveUTC } : {}),
+        },
+      },
       _count: { _all: true },
     });
     const pivot = new Map<string, CaptacaoRow>();
