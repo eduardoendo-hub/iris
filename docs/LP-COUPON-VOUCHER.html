@@ -1,0 +1,46 @@
+<!--
+  PADRAO IMPACTA — Cupom na LP via URL → desconto automatico no Engaged.
+
+  COMO USAR numa LP nova: cole este <script> inteiro logo antes de </body>.
+  Funciona em QUALQUER LP (HTML inline, artifact bundle do Claude, etc) porque
+  nao depende de variavel/namespace — so reescreve os links de checkout no DOM.
+
+  COMO USAR no anuncio: ponha ?cupom=CODIGO na URL da LP, ex:
+    https://advia.technowhub.ai/?utm_source=meta&utm_campaign=X&cupom=ADVIA30
+  No clique em "Comprar/Garantir vaga", o link do Engaged sai com
+    ...?...&voucher_code=ADVIA30
+  e o Engaged aplica o desconto sozinho (testado: ADVIA30 -> -R$149,10).
+
+  Pre-requisito: o cupom precisa existir/estar ativo no painel do Engaged — a
+  LP so repassa o codigo; quem valida e aplica e o Engaged.
+
+  Aceita ?cupom=, ?coupon= e ?voucher_code= (aliases). Persiste na sessao
+  (sessionStorage 'lp_cupom') — nao gruda entre sessoes. Idempotente.
+-->
+<script>
+(function(){
+  function cupom(){
+    try{
+      var p=new URLSearchParams(location.search);
+      var c=p.get('cupom')||p.get('coupon')||p.get('voucher_code');
+      if(c){c=c.trim();try{sessionStorage.setItem('lp_cupom',c);}catch(e){}return c;}
+      try{return sessionStorage.getItem('lp_cupom')||null;}catch(e){return null;}
+    }catch(e){return null;}
+  }
+  function patch(a,c){
+    try{
+      var url=new URL(a.getAttribute('href'),location.href);
+      if(!url.searchParams.get('voucher_code')){url.searchParams.set('voucher_code',c);a.setAttribute('href',url.toString());}
+    }catch(e){}
+  }
+  function applyAll(){
+    var c=cupom(); if(!c) return;
+    document.querySelectorAll('a[href*="engaged.com.br/p/checkout"]').forEach(function(a){patch(a,c);});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyAll);else applyAll();
+  document.addEventListener('click',function(e){
+    var el=e.target&&e.target.closest?e.target.closest('a[href*="engaged.com.br/p/checkout"]'):null;
+    if(!el)return; var c=cupom(); if(c)patch(el,c);
+  },true);
+})();
+</script>
