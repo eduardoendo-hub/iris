@@ -6,8 +6,9 @@
  * Auth: X-Admin-Secret = IRIS_WEBHOOK_SECRET
  *
  * Query:
- *   ?status=DRAFT     (opcional, filtra)
- *   ?limit=50         (default)
+ *   ?status=DRAFT             (opcional, filtra por status)
+ *   ?campaignSlug=...         (opcional, filtra por turma; "null" = sem turma)
+ *   ?limit=50                 (default)
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -27,9 +28,15 @@ export async function GET(req: NextRequest) {
   }
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
+  const campaignSlugParam = url.searchParams.get("campaignSlug");
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
 
-  const where = status ? { status } : {};
+  // campaignSlug=null filtra registros sem turma (legados/nao resolvidos)
+  const campaignWhere =
+    campaignSlugParam === null
+      ? {}
+      : { campaignSlug: campaignSlugParam === "null" ? null : campaignSlugParam };
+  const where = { ...(status ? { status } : {}), ...campaignWhere };
   const rows = await prisma.engagedPurchase.findMany({
     where,
     orderBy: { eventAt: "desc" },
@@ -37,6 +44,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       productSlug: true,
+      campaignSlug: true,
       externalId: true,
       status: true,
       lastEventType: true,
@@ -56,8 +64,17 @@ export async function GET(req: NextRequest) {
     _count: { _all: true },
   });
 
+  // Sumario por turma (campaignSlug) — pra auditar atribuicao. null = sem turma.
+  const byCampaign = await prisma.engagedPurchase.groupBy({
+    by: ["campaignSlug"],
+    _count: { _all: true },
+  });
+
   return NextResponse.json({
     summary: summary.map((s) => ({ status: s.status, count: s._count._all })),
+    byCampaign: byCampaign
+      .map((c) => ({ campaignSlug: c.campaignSlug, count: c._count._all }))
+      .sort((a, b) => b.count - a.count),
     total: rows.length,
     rows: rows.map((r) => ({
       ...r,
