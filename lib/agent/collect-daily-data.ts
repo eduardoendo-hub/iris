@@ -14,6 +14,7 @@
  * Saída é JSON serializável — vai direto pro prompt da LLM.
  */
 import { prisma } from "@/lib/prisma";
+import type { InsightCampaignGoals } from "@/lib/campaigns";
 
 /** Bucket startsAt do dia analisado em SP (= dia 03:00 UTC) */
 export function spDayBucketUTC(date: Date): Date {
@@ -34,9 +35,13 @@ export function spDateLabel(date: Date): string {
 export type DailySnapshot = {
   productSlug: string;
   campaignSlug: string; // "" se for produto-wide
+  campaignName: string; // nome da campanha (pro prompt) — "" se desconhecido
   analysisDate: string; // YYYY-MM-DD SP
   campaignDay: number | null; // dia N desde início da campanha (1 = primeiro dia)
   daysToFinalEnrollment: number | null;
+  // Metas/alvos da campanha ATIVA — alimentam o prompt do agente (antes eram
+  // hardcoded da turma de maio). Zeros se a campanha nao tem metas cadastradas.
+  goals: InsightCampaignGoals;
 
   captacao: {
     visitas: number;
@@ -99,13 +104,22 @@ export type DailySnapshot = {
 export async function collectDailySnapshot(opts: {
   productSlug: string;
   campaignSlug?: string | null;
+  campaignName?: string | null;
   analysisDateUTC: Date; // bucket SP day em UTC (03:00 UTC)
   campaignStartISO?: string; // ex: "2026-05-11"
   campaignEnrollmentEndISO?: string; // ex: "2026-06-07"
-  campaignGoals?: { matriculas: number; receita: number; cacMax: number; roasAlvo: number };
+  campaignGoals?: Partial<InsightCampaignGoals>;
 }): Promise<DailySnapshot> {
   const { productSlug, analysisDateUTC } = opts;
   const campaignSlug: string = opts.campaignSlug ?? "";
+  const goals: InsightCampaignGoals = {
+    matriculas: opts.campaignGoals?.matriculas ?? 0,
+    receita: opts.campaignGoals?.receita ?? 0,
+    cacMax: opts.campaignGoals?.cacMax ?? 0,
+    roasAlvo: opts.campaignGoals?.roasAlvo ?? 0,
+    cplAlvo: opts.campaignGoals?.cplAlvo ?? 0,
+    budgetTotal: opts.campaignGoals?.budgetTotal ?? 0,
+  };
   const dayEndUTC = new Date(analysisDateUTC.getTime() + 24 * 60 * 60 * 1000);
   const sevenDaysAgoUTC = new Date(analysisDateUTC.getTime() - 7 * 24 * 60 * 60 * 1000);
   const dayBeforeUTC = new Date(analysisDateUTC.getTime() - 24 * 60 * 60 * 1000);
@@ -225,8 +239,8 @@ export async function collectDailySnapshot(opts: {
   });
   const acumuladoMatriculas = vendasTotalAgg._count._all;
   const acumuladoReceita = Number(vendasTotalAgg._sum.amount ?? 0);
-  const progressoMeta = opts.campaignGoals?.matriculas
-    ? (acumuladoMatriculas / opts.campaignGoals.matriculas) * 100
+  const progressoMeta = goals.matriculas
+    ? (acumuladoMatriculas / goals.matriculas) * 100
     : 0;
 
   // ─── Comparações ────────────────────────────────────────────────────────
@@ -318,9 +332,11 @@ export async function collectDailySnapshot(opts: {
   return {
     productSlug,
     campaignSlug,
+    campaignName: opts.campaignName ?? "",
     analysisDate: spDateLabel(analysisDateUTC),
     campaignDay,
     daysToFinalEnrollment,
+    goals,
     captacao: {
       visitas,
       clickCompra,

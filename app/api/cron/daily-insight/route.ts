@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listProductSlugs, getProductConfig } from "@/lib/products";
 import { collectDailySnapshot, spDayBucketUTC } from "@/lib/agent/collect-daily-data";
 import { generateInsight } from "@/lib/agent/generate-insight";
+import { getInsightCampaignContext } from "@/lib/campaigns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
 
   const results: Array<{
     productSlug: string;
+    campaignSlug?: string;
     outcome: string;
     insightId?: string;
     reason?: string;
@@ -60,26 +62,38 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    // Contexto da campanha ATIVA (slug/janela/metas) vem do DB — nao mais
+    // hardcoded da turma de maio. Sem campanha ativa, PULA (nao gera insight
+    // com contexto errado). Campanha nova entra automaticamente assim que vira
+    // ACTIVE — sem tocar codigo.
+    const ctx = await getInsightCampaignContext(slug);
+    if (!ctx) {
+      results.push({ productSlug: slug, outcome: "skipped", reason: "no_active_campaign" });
+      continue;
+    }
+
     try {
       const snapshot = await collectDailySnapshot({
         productSlug: slug,
-        campaignSlug: product.campaignSlug ?? null,
+        campaignSlug: ctx.campaignSlug,
+        campaignName: ctx.campaignName,
         analysisDateUTC,
-        campaignStartISO: "2026-05-11",
-        campaignEnrollmentEndISO: "2026-06-07",
-        campaignGoals: { matriculas: 30, receita: 44970, cacMax: 300, roasAlvo: 5 },
+        campaignStartISO: ctx.startISO,
+        campaignEnrollmentEndISO: ctx.endISO,
+        campaignGoals: ctx.goals,
       });
 
       const r = await generateInsight({
         snapshot,
-        campaignSlug: product.campaignSlug ?? null,
+        campaignSlug: ctx.campaignSlug,
         dryRun,
       });
 
-      results.push({ productSlug: slug, ...r });
+      results.push({ productSlug: slug, campaignSlug: ctx.campaignSlug, ...r });
     } catch (err) {
       results.push({
         productSlug: slug,
+        campaignSlug: ctx.campaignSlug,
         outcome: "error",
         reason: err instanceof Error ? err.message : String(err),
       });

@@ -21,28 +21,44 @@ import type { DailySnapshot } from "./collect-daily-data";
 const PROMPT_VERSION = "v2";
 const MODEL = "claude-opus-4-7";
 
-let cachedKnowledgeBase: string | null = null;
-function loadKnowledgeBase(): string {
-  if (cachedKnowledgeBase) return cachedKnowledgeBase;
+// Cache da knowledge base POR PRODUTO — cada produto pode ter seus proprios
+// markdowns; o generico (impacta-context, traffic-best-practices) entra sempre.
+const cachedKnowledgeByProduct = new Map<string, string>();
+function loadKnowledgeBase(productSlug: string): string {
+  const cached = cachedKnowledgeByProduct.get(productSlug);
+  if (cached) return cached;
   const dir = path.join(process.cwd(), "lib", "agent", "knowledge");
   const altDir = path.join("/app", "lib", "agent", "knowledge");
   const baseDir = fs.existsSync(dir) ? dir : altDir;
-  const files = ["impacta-context.md", "claude-pro-product.md", "campaign-plan.md", "traffic-best-practices.md"];
-  const parts = files.map((f) => {
+  // Genericos sempre + especificos do produto SE existirem. Assim cada produto
+  // (claude-pro, codigozero, advia, ...) usa seu proprio contexto, e produto
+  // novo sem markdown ainda cai no generico em vez de receber contexto alheio.
+  const candidates = [
+    "impacta-context.md",
+    "traffic-best-practices.md",
+    `${productSlug}-product.md`,
+    `${productSlug}-campaign-plan.md`,
+    // Back-compat: os arquivos originais do claude-pro nao tinham prefixo no
+    // campaign-plan. Mantem pra nao perder contexto da turma de claude-pro.
+    ...(productSlug === "claude-pro" ? ["campaign-plan.md"] : []),
+  ];
+  const parts: string[] = [];
+  for (const f of candidates) {
     const p = path.join(baseDir, f);
-    return `# === ${f} ===\n\n${fs.readFileSync(p, "utf8")}`;
-  });
-  cachedKnowledgeBase = parts.join("\n\n---\n\n");
-  return cachedKnowledgeBase;
+    if (fs.existsSync(p)) parts.push(`# === ${f} ===\n\n${fs.readFileSync(p, "utf8")}`);
+  }
+  const kb = parts.join("\n\n---\n\n");
+  cachedKnowledgeByProduct.set(productSlug, kb);
+  return kb;
 }
 
-const SYSTEM_PROMPT_HEAD = `Voce e um gestor de trafego senior especializado em Meta Ads e Google Ads, com 10+ anos em campanhas de educacao executiva no Brasil. Voce foi contratado pela Impacta Treinamentos pra analisar diariamente a performance da campanha do Curso Claude Pro e dar direcao estrategica concreta — nao relatorios genericos.
+const SYSTEM_PROMPT_HEAD = `Voce e um gestor de trafego senior especializado em Meta Ads e Google Ads, com 10+ anos em campanhas de educacao executiva no Brasil. Voce foi contratado pela Impacta Treinamentos pra analisar diariamente a performance da campanha de lancamento informada no relatorio do dia e dar direcao estrategica concreta — nao relatorios genericos. O produto, a campanha e as METAS (matriculas, CAC, ROAS, CPL, budget) variam por lancamento e vem SEMPRE no relatorio do dia (secao de cabecalho e VENDAS). Use os alvos do relatorio, nunca numeros decorados.
 
 Seu trabalho TODO DIA:
 1. Receber dados do dia anterior (captacao, midia, vendas) + historico de 7 dias + insights anteriores
 2. Identificar o que esta funcionando, o que esta quebrado, o que e ruido
 3. Recomendar 1 a 3 acoes especificas, priorizadas e quantificadas que o time deve executar nas proximas 24h. Menos e melhor — so recomende o que realmente importa hoje.
-4. Comparar com targets do plano de marketing (CAC R$ 300, ROAS 5x, 30 matriculas em 4 semanas, R$ 9k budget total)
+4. Comparar com os targets do plano de marketing que vierem no relatorio (CAC, ROAS, meta de matriculas, CPL, budget total) — sao especificos da campanha do dia.
 
 PRINCIPIOS:
 - Decisao por evidencia — nao recomende escalar criativo com <200 cliques nem matar com <1.000 impressoes
@@ -147,6 +163,21 @@ function formatUserPrompt(s: DailySnapshot): string {
   const m = s.midia;
   const v = s.vendas;
   const cmp = s.comparacao;
+  const g = s.goals;
+  // Alvos da campanha do dia — formatados, com "—" quando nao cadastrados.
+  const tgtCac = g.cacMax > 0 ? `target ≤ ${fmtBRL(g.cacMax)}` : "sem target cadastrado";
+  const tgtRoas = g.roasAlvo > 0 ? `target ≥ ${g.roasAlvo.toFixed(1)}x` : "sem target cadastrado";
+  const tgtMatriculas = g.matriculas > 0 ? `${fmtNum(g.matriculas)} alvo` : "sem meta cadastrada";
+  const tgtBudget = g.budgetTotal > 0 ? `target campanha total ${fmtBRL(g.budgetTotal)}` : "sem budget cadastrado";
+  const targetsLine = [
+    g.matriculas > 0 ? `matrículas ${fmtNum(g.matriculas)}` : null,
+    g.cacMax > 0 ? `CAC ≤ ${fmtBRL(g.cacMax)}` : null,
+    g.roasAlvo > 0 ? `ROAS ≥ ${g.roasAlvo.toFixed(1)}x` : null,
+    g.cplAlvo > 0 ? `CPL ${fmtBRL(g.cplAlvo)}` : null,
+    g.budgetTotal > 0 ? `${fmtBRL(g.budgetTotal)} budget total` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "(metas nao cadastradas na campanha)";
 
   const topFontes = c.visitasPorFonte
     .map(
@@ -171,7 +202,7 @@ function formatUserPrompt(s: DailySnapshot): string {
 
   return `# ANÁLISE DO DIA ${s.analysisDate}
 
-Produto: ${s.productSlug}  |  Campanha: ${s.campaignSlug ?? "(produto-wide)"}
+Produto: ${s.productSlug}  |  Campanha: ${s.campaignName || s.campaignSlug || "(produto-wide)"}${s.campaignSlug ? ` (${s.campaignSlug})` : ""}
 ${s.campaignDay !== null ? `Dia ${s.campaignDay} da campanha` : ""}${
     s.daysToFinalEnrollment !== null ? ` · ${s.daysToFinalEnrollment} dias até fim das matrículas` : ""
   }
@@ -195,7 +226,7 @@ ${topFontes || "(sem visitas registradas)"}
 
 - Spend dia: **${fmtBRL(m.spendDia)}** (${fmtBRL(m.spendDiaMeta)} Meta + ${fmtBRL(m.spendDiaGoogle)} Google)
 - Spend ontem: ${fmtBRL(cmp.spendOntem)}  |  Média 7d: ${fmtBRL(cmp.spendMedia7d)}  |  Variação vs 7d: ${fmtPct(m.spendVs7dMedia)}
-- Spend acumulado mês: **${fmtBRL(m.spendAcumuladoMes)}** (target campanha total R$ 9.000)
+- Spend acumulado mês: **${fmtBRL(m.spendAcumuladoMes)}** (${tgtBudget})
 - Impressões: ${fmtNum(m.impressionsDia)}
 - Cliques Ads: ${fmtNum(m.clicksAdsDia)}
 - CTR ads: ${fmtPct(m.ctrAdsDia)}
@@ -204,9 +235,9 @@ ${topFontes || "(sem visitas registradas)"}
 ## VENDAS
 
 - Novas vendas hoje: **${fmtNum(v.novasDia)}**  |  Receita hoje: **${fmtBRL(v.receitaDia)}**
-- CAC hoje: ${v.cacDia ? fmtBRL(v.cacDia) : "—"} (target ≤ R$ 300)
-- ROAS hoje: ${v.roasDia ? v.roasDia.toFixed(2) + "x" : "—"} (target ≥ 5,0x)
-- Acumulado campanha: **${fmtNum(v.acumuladoMatriculas)}** matrículas / 30 alvo (${fmtPct(v.progressoMeta)})
+- CAC hoje: ${v.cacDia ? fmtBRL(v.cacDia) : "—"} (${tgtCac})
+- ROAS hoje: ${v.roasDia ? v.roasDia.toFixed(2) + "x" : "—"} (${tgtRoas})
+- Acumulado campanha: **${fmtNum(v.acumuladoMatriculas)}** matrículas / ${tgtMatriculas} (${fmtPct(v.progressoMeta)})
 - Receita acumulada: ${fmtBRL(v.acumuladoReceita)}
 - Vendas média 7d: ${cmp.vendasMedia7d.toFixed(1)}/dia
 
@@ -219,7 +250,7 @@ ${insightsPrev}
 Gere AGORA a análise estratégica do dia ${s.analysisDate} no formato JSON estruturado, considerando:
 
 1. **Cronologia**: estamos no dia ${s.campaignDay ?? "?"} da campanha. Volume baixo nos 2–3 primeiros dias é esperado (algoritmo aprendendo).
-2. **Targets**: matrículas 30 · CAC ≤ R$ 300 · ROAS ≥ 5x · CPL R$ 32–36 · 9k budget total.
+2. **Targets** (desta campanha): ${targetsLine}.
 3. **Memória**: se você recomendou algo nos últimos dias e não foi executado, reforce. Se foi e funcionou, evolua.
 4. **Recomendações executáveis hoje** (próximas 24h), não daqui a 2 semanas.
 `;
@@ -244,7 +275,7 @@ export async function generateInsight(opts: {
     return { outcome: "error", reason: "ANTHROPIC_API_KEY nao configurada" };
   }
 
-  const knowledge = loadKnowledgeBase();
+  const knowledge = loadKnowledgeBase(opts.snapshot.productSlug);
   const userPrompt = formatUserPrompt(opts.snapshot);
 
   if (opts.dryRun) {

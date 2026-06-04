@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
+import { getInsightCampaignContext } from "@/lib/campaigns";
 import { collectDailySnapshot, spDayBucketUTC } from "@/lib/agent/collect-daily-data";
 import { generateInsight } from "@/lib/agent/generate-insight";
 
@@ -90,18 +91,29 @@ export async function POST(req: NextRequest) {
     analysisDateUTC = spDayBucketUTC(nowMinusOneDay);
   }
 
+  // Contexto da campanha ATIVA (slug/janela/metas) vem do DB. Sem campanha
+  // ativa, nao tem o que analisar — retorna 400 explicito.
+  const ctx = await getInsightCampaignContext(productSlug);
+  if (!ctx) {
+    return NextResponse.json(
+      { error: "no_active_campaign", productSlug, hint: "Crie/ative uma campanha em /admin/campaigns." },
+      { status: 400 }
+    );
+  }
+
   try {
     const snapshot = await collectDailySnapshot({
       productSlug,
-      campaignSlug: product.campaignSlug ?? null,
+      campaignSlug: ctx.campaignSlug,
+      campaignName: ctx.campaignName,
       analysisDateUTC,
-      campaignStartISO: "2026-05-11",
-      campaignEnrollmentEndISO: "2026-06-07",
-      campaignGoals: { matriculas: 30, receita: 44970, cacMax: 300, roasAlvo: 5 },
+      campaignStartISO: ctx.startISO,
+      campaignEnrollmentEndISO: ctx.endISO,
+      campaignGoals: ctx.goals,
     });
     const r = await generateInsight({
       snapshot,
-      campaignSlug: product.campaignSlug ?? null,
+      campaignSlug: ctx.campaignSlug,
       dryRun,
     });
     return NextResponse.json({

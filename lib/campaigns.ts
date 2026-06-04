@@ -119,6 +119,55 @@ export async function getCampaignBySharedId(sharedId: string) {
   }
 }
 
+/** Metas/alvos de uma campanha, normalizados pro agente de insight. */
+export type InsightCampaignGoals = {
+  matriculas: number;
+  receita: number;
+  cacMax: number;
+  roasAlvo: number;
+  cplAlvo: number;
+  budgetTotal: number;
+};
+
+export type InsightCampaignContext = {
+  campaignSlug: string;
+  campaignName: string;
+  productSlug: string;
+  startISO: string; // YYYY-MM-DD (SP) do inicio
+  endISO: string; // YYYY-MM-DD (SP) do fim efetivo (endedAt ?? endDate)
+  goals: InsightCampaignGoals;
+};
+
+/**
+ * Contexto da campanha ATIVA de um produto pro agente de insight — slug,
+ * nome, janela e metas, TODOS vindos do DB (nao mais hardcoded da turma de
+ * maio). Retorna null se o produto nao tem campanha ativa (cron pula, em vez
+ * de gerar insight com contexto errado). Resolve automaticamente qualquer
+ * campanha nova assim que ela entra como ACTIVE — sem tocar codigo.
+ */
+export async function getInsightCampaignContext(
+  productSlug: string
+): Promise<InsightCampaignContext | null> {
+  const active = await getActiveCampaign(productSlug);
+  if (!active) return null;
+  const w = getCampaignWindow(active);
+  return {
+    campaignSlug: active.slug,
+    campaignName: active.name,
+    productSlug: active.productSlug,
+    startISO: w.startYMD,
+    endISO: w.endYMD,
+    goals: {
+      matriculas: active.goalEnrollments ?? 0,
+      receita: active.goalRevenue ? Number(active.goalRevenue) : 0,
+      cacMax: active.goalCac ? Number(active.goalCac) : 0,
+      roasAlvo: active.goalRoas ? Number(active.goalRoas) : 0,
+      cplAlvo: active.goalCpl ? Number(active.goalCpl) : 0,
+      budgetTotal: active.mediaBudget ? Number(active.mediaBudget) : 0,
+    },
+  };
+}
+
 export type IngestGate = {
   /** Pode ingerir agora? false = pular gravacao (campanha encerrada/sem ativa). */
   ingest: boolean;
