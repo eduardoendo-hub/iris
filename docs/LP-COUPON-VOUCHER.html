@@ -14,8 +14,8 @@
   Pre-requisito: o cupom precisa existir/estar ativo no painel do Engaged — a
   LP so repassa o codigo; quem valida e aplica e o Engaged.
 
-  Aceita ?cupom=, ?coupon= e ?voucher_code= (aliases). Persiste na sessao
-  (sessionStorage 'lp_cupom') — nao gruda entre sessoes. Idempotente.
+  Aceita ?cupom=, ?coupon= e ?voucher_code= (aliases). SO aplica quando o cupom
+  vem na URL — NAO persiste (entrar direto sem ?cupom= nao aplica). Idempotente.
 -->
 <script>
 (function(){
@@ -23,8 +23,7 @@
     try{
       var p=new URLSearchParams(location.search);
       var c=p.get('cupom')||p.get('coupon')||p.get('voucher_code');
-      if(c){c=c.trim();try{sessionStorage.setItem('lp_cupom',c);}catch(e){}return c;}
-      try{return sessionStorage.getItem('lp_cupom')||null;}catch(e){return null;}
+      return c?c.trim():null; // SO da URL: nao persiste
     }catch(e){return null;}
   }
   function patch(a,c){

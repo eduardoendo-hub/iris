@@ -50,11 +50,9 @@
     // CUPOM: ?cupom= (aliases coupon/voucher_code) na URL do anuncio vira
     // ?voucher_code= no checkout — o Engaged aplica o desconto SOZINHO com esse
     // param (testado no checkout 4jtt6rr7ti: ADVIA30 -> -R$149,10 automatico).
-    // Persistido na sessao pra sobreviver a navegacao interna sem grudar pra
-    // sempre. Sem este mapeamento, ?cupom= passa cru e o Engaged ignora.
+    // SO da URL: nao persiste. Entrar direto (sem ?cupom=) nao aplica cupom.
+    // Sem este mapeamento, ?cupom= passa cru e o Engaged ignora.
     var cupom = current.get("cupom") || current.get("coupon") || current.get("voucher_code");
-    if (cupom) { try { sessionStorage.setItem("lp_cupom", cupom.trim()); } catch (e) {} }
-    else { try { cupom = sessionStorage.getItem("lp_cupom"); } catch (e) {} }
     current.delete("cupom"); current.delete("coupon"); // remove alias cru da URL
     if (cupom) current.set("voucher_code", cupom.trim());
     var qs = current.toString();
