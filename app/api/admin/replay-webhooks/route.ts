@@ -36,6 +36,14 @@ export async function POST(req: NextRequest) {
   const outcome = url.searchParams.get("outcome") || "validation_failed";
   const dryRun = url.searchParams.get("dry_run") === "true";
   const confirm = url.searchParams.get("confirm") === "yes";
+  // Alvo cirurgico: ?logId= ou ?externalId= reprocessa SO esse(s) log(s),
+  // ignorando o filtro de outcome. Util pra recuperar 1 webhook especifico
+  // (ex: lead que caiu como product_not_tracked antes da turma existir) sem
+  // reprocessar o lote inteiro de ignored (que dispararia efeitos colaterais
+  // tipo push de lead no RD CRM pra outros leads que voltariam a resolver).
+  const logId = url.searchParams.get("logId");
+  const externalIdFilter = url.searchParams.get("externalId");
+  const targeted = logId || externalIdFilter;
 
   if (!dryRun && !confirm) {
     return NextResponse.json(
@@ -47,9 +55,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Busca logs candidatos a reprocessar
+  // Busca logs candidatos a reprocessar. Com alvo (logId/externalId), filtra
+  // por ele e ignora o outcome; senao, usa o filtro de outcome em lote.
   const logs = await prisma.webhookLog.findMany({
-    where: { source, outcome },
+    where: targeted
+      ? { source, ...(logId ? { id: logId } : {}), ...(externalIdFilter ? { externalId: externalIdFilter } : {}) }
+      : { source, outcome },
     orderBy: { receivedAt: "asc" },
     take: 100,
   });
