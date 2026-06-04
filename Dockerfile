@@ -8,6 +8,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
+# Aumenta o heap do Node so no build — `next build` estoura o default em
+# instancias com pouca RAM (Coolify), morrendo com SIGKILL/exit 255 antes de
+# imprimir erro. So afeta esta etapa; o runtime (stage runner) nao herda.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 FROM node:22-alpine AS runner
