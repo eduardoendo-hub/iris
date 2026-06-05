@@ -178,6 +178,11 @@ function formatUserPrompt(s: DailySnapshot): string {
   ]
     .filter(Boolean)
     .join(" · ") || "(metas nao cadastradas na campanha)";
+  // Plano de marketing cadastrado NESTA campanha — quando presente, e a fonte
+  // autoritativa da realidade da turma vigente (sobrepoe o manual evergreen).
+  const planoBlock = s.campaignPlan
+    ? `\n## PLANO DA CAMPANHA VIGENTE (cadastrado nesta turma — use como fonte da realidade)\n\n${s.campaignPlan}\n`
+    : "";
 
   const topFontes = c.visitasPorFonte
     .map(
@@ -206,7 +211,7 @@ Produto: ${s.productSlug}  |  Campanha: ${s.campaignName || s.campaignSlug || "(
 ${s.campaignDay !== null ? `Dia ${s.campaignDay} da campanha` : ""}${
     s.daysToFinalEnrollment !== null ? ` · ${s.daysToFinalEnrollment} dias até fim das matrículas` : ""
   }
-
+${planoBlock}
 ## CAPTAÇÃO
 
 - Visitas LP: **${fmtNum(c.visitas)}** (ontem ${fmtNum(cmp.visitasOntem)}, média 7d ${fmtNum(

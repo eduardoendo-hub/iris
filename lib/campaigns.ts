@@ -136,6 +136,9 @@ export type InsightCampaignContext = {
   startISO: string; // YYYY-MM-DD (SP) do inicio
   endISO: string; // YYYY-MM-DD (SP) do fim efetivo (endedAt ?? endDate)
   goals: InsightCampaignGoals;
+  /** Plano de marketing cadastrado NESTA campanha (DB). Vazio se nao preenchido.
+   *  Quando presente, e a fonte da "realidade" da turma vigente pro agente. */
+  marketingPlan: string | null;
 };
 
 /**
@@ -165,6 +168,7 @@ export async function getInsightCampaignContext(
       cplAlvo: active.goalCpl ? Number(active.goalCpl) : 0,
       budgetTotal: active.mediaBudget ? Number(active.mediaBudget) : 0,
     },
+    marketingPlan: active.marketingPlan?.trim() ? active.marketingPlan.trim() : null,
   };
 }
 

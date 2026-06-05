@@ -42,6 +42,9 @@ export type DailySnapshot = {
   // Metas/alvos da campanha ATIVA — alimentam o prompt do agente (antes eram
   // hardcoded da turma de maio). Zeros se a campanha nao tem metas cadastradas.
   goals: InsightCampaignGoals;
+  // Plano de marketing cadastrado NESTA campanha (DB). "" se nao preenchido.
+  // Quando presente, e a fonte autoritativa da realidade da turma vigente.
+  campaignPlan: string;
 
   captacao: {
     visitas: number;
@@ -105,6 +108,7 @@ export async function collectDailySnapshot(opts: {
   productSlug: string;
   campaignSlug?: string | null;
   campaignName?: string | null;
+  campaignPlan?: string | null;
   analysisDateUTC: Date; // bucket SP day em UTC (03:00 UTC)
   campaignStartISO?: string; // ex: "2026-05-11"
   campaignEnrollmentEndISO?: string; // ex: "2026-06-07"
@@ -346,6 +350,7 @@ export async function collectDailySnapshot(opts: {
     campaignDay,
     daysToFinalEnrollment,
     goals,
+    campaignPlan: opts.campaignPlan?.trim() ? opts.campaignPlan.trim() : "",
     captacao: {
       visitas,
       clickCompra,

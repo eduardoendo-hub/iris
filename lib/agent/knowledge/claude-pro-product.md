@@ -1,33 +1,36 @@
 # Curso: Formação Claude Pro — Do Cowork ao Code
 
+> EVERGREEN: este arquivo descreve o PRODUTO (posicionamento, currículo,
+> personas, funil) — coisas que NÃO mudam por turma. Os números da turma
+> vigente (preço, datas da turma, janela de matrículas, metas, sharedId do
+> checkout) vêm SEMPRE do relatório do dia (campanha ACTIVE no banco) e do
+> "PLANO DA CAMPANHA" quando presente. NUNCA assuma preço/data/meta fixos aqui
+> — use os do relatório.
+
 ## Síntese do produto
 
 - **Slug interno IRIS**: `claude-pro`
 - **Nome comercial**: Formação Claude Pro: do Cowork ao Code
 - **Formato**: 100% ao vivo online sincrônico, 5 dias consecutivos, 19h–22h (Brasília)
-- **Total de horas**: 15h ao vivo + ~5h de bônus para os 20 primeiros = 20h
+- **Total de horas**: 15h ao vivo + ~5h de bônus para os primeiros inscritos
 - **Entregáveis**: **20 projetos reais** construídos durante o curso, todos aplicáveis ao trabalho do aluno
-- **Pré-requisito explícito**: o aluno precisa ter (ou adquirir) **assinatura Claude Pro** (~US$ 20/mês). Não é tema de objeção forte porque público-alvo já tem ou aceita pagar.
+- **Pré-requisito explícito**: o aluno precisa ter (ou adquirir) **assinatura Claude Pro** (~US$ 20/mês). Não é objeção forte — público-alvo já tem ou aceita pagar.
 - **Sem pré-requisito técnico**: não precisa saber programar (decisivo na conversão)
-- **Política de reembolso**: 7 dias após início (ainda em definição, em flux)
 
 ## Ticket e oferta
 
-- **Preço cheio**: R$ 4.000
-- **Preço com desconto (atual)**: R$ 1.699
-- **Bônus 20 primeiros**: 1h extra ao vivo com instrutor
-- **Forma de pagamento**: à vista ou parcelado no checkout Engaged
+- O **preço da turma vigente** e o parcelamento são definidos na LP/checkout
+  Engaged — NÃO assuma um valor fixo. Para raciocinar sobre ticket médio, use o
+  ticket real implícito nos dados: `acumuladoReceita / acumuladoMatriculas`.
+- Bônus típico: 1h extra ao vivo com instrutor para os primeiros inscritos.
+- Forma de pagamento: à vista ou parcelado no checkout Engaged.
 
-## Datas da campanha (Turma 2 — Julho/2026)
+## Datas e metas
 
-- **Início mídia paga**: 2026-06-05 (sexta) — início da janela da campanha
-- **Início da turma**: 2026-07-06 (segunda)
-- **Fim da turma**: 2026-07-10 (sexta) — 5 dias úteis seg-sex
-- **Fim de matrículas**: 2026-07-06 (segunda)
-
-> As datas/metas EXATAS da campanha vigente vêm do relatório do dia (resolvidas
-> da campanha ACTIVE no banco). Estes valores são só contexto; em divergência,
-> valem os do relatório.
+- A **janela de matrículas**, as **datas da turma** e as **metas** (matrículas,
+  receita, CAC, ROAS, CPL, budget) são as do **relatório do dia** — resolvidas da
+  campanha ACTIVE no banco. Cada turma tem as suas. Use SEMPRE o que vier no
+  relatório, não números deste arquivo.
 
 ## Promessa central / hook
 
@@ -53,29 +56,22 @@ O insight é: a maioria das pessoas usa Claude/ChatGPT só como chat avançado (
 ## Objeções comuns na LP
 
 - **"Preciso saber programar?"** → Não. Reforçar isso no criativo e na LP.
-- **"R$ 1.699 é caro"** → Comparar com 1h de consultoria (R$ 500+) ou ROI do primeiro projeto.
+- **"Está caro"** → Comparar com 1h de consultoria (R$ 500+) ou ROI do primeiro projeto. (Use o preço atual da oferta, não um valor fixo.)
 - **"Só 5 dias dá tempo?"** → 20 projetos provam densidade. Reforçar.
 - **"Já uso ChatGPT/Claude"** → Esse é o gatilho central — você usa como chat, vai aprender a usar como sistema.
-
-## CTAs da LP
-
-- **Hero**: "Quero me matricular · ~~R$ 4.000~~ R$ 1.699"
-- **Final**: "Garantir minha vaga · ~~R$ 4.000~~ R$ 1.699"
-- **Sticky mobile**: "Quero me matricular" (turma 06/07)
-- **Botão WhatsApp**: "Falar com especialista" (envia pra consultor SDR)
-- **Form "Falar com especialista"**: cria Lead em RD Station CRM via `integracao-rd`
 
 ## Pipeline de monetização
 
 ```
-LP → click_compra → checkout Engaged (https://impacta.site.engaged.com.br/p/checkout/72rspa5wc8)
-   → pagamento → webhook → /api/webhook/engaged → Sale criada no IRIS
+LP → click_compra → checkout Engaged (da turma vigente; o sharedId mora na
+   Campaign.engagedCheckoutSharedIds) → pagamento → webhook
+   → /api/webhook/engaged → Sale criada no IRIS
 ```
 
 Outros caminhos:
 - **WhatsApp**: float bubble + sticky bar → conversão por SDR (vira `source=CONSULTOR` na Sale).
 - **Form "Falar com especialista"**: lead vai pro RD CRM, SDR liga, vira matrícula `source=CONSULTOR`.
-- **Direta**: matrícula tirada por algum canal não rastreável (raro, lançada manual via cockpit).
+- **Direta**: matrícula tirada por canal não rastreável (raro, lançada manual via cockpit).
 
 ## ⚠️ DEFINIÇÕES CRÍTICAS — não confunda
 
@@ -89,15 +85,15 @@ Existe uma diferença ENORME entre eventos de **intenção** e **matrícula real
 | **`captacao.clickWhats`** | cliques pra abrir WhatsApp | VisitEvent (`click_whats`) | INTENÇÃO de conversar, NÃO matrícula |
 | **`captacao.leadForm`** | submits do form "Falar com especialista" | VisitEvent (`lead_form`) | Lead capturado (vira deal no RD CRM), NÃO matrícula |
 | **`vendas.novasDia`** | **MATRÍCULAS pagas** confirmadas no dia | Sale (de webhook Engaged confirmado OU manual via cockpit) | **A ÚNICA MÉTRICA QUE CONTA COMO VENDA REAL** |
-| **`vendas.acumuladoMatriculas`** | total de matrículas pagas da campanha | Sale (todas, agregado) | **Único número que conta pra meta de 30 matrículas** |
+| **`vendas.acumuladoMatriculas`** | total de matrículas pagas da campanha vigente | Sale (escopado à janela da campanha) | **Único número que conta pra meta de matrículas** |
 | **`vendas.receitaDia` / `acumuladoReceita`** | R$ efetivo de matrículas | Sale (sum amount) | dinheiro recebido |
 
 **Regras de raciocínio:**
-- "Conversão" no contexto do funil pode significar coisas diferentes — sempre especifique qual:
+- "Conversão" no funil pode significar coisas diferentes — sempre especifique qual:
   - **Conv visita→intent**: `clickCompra / visitas` (mede se a LP gera interesse)
   - **Conv visita→matrícula**: `novasDia / visitas` (mede taxa final de compra)
   - **Conv intent→matrícula**: `novasDia / clickCompra` (mede se o checkout retém)
 - Para **CAC e ROAS**: usa SEMPRE `vendas.novasDia` e `vendas.receitaDia`, NUNCA `clickCompra`.
-- Para **progresso da meta**: usa `vendas.acumuladoMatriculas` / 30.
-- Quando o agente vê 18 clickCompra e 2 novasDia: NÃO diga "18 matrículas" nem "ROAS de X com 18 vendas". Diga "18 intent-clicks geraram 2 matrículas no dia (conv intent→matrícula 11%)".
-- Se houver click_compra alto e novasDia baixo, o problema está no **checkout** (página Engaged) ou na LP convertendo curiosos demais — não no tráfego.
+- Para **progresso da meta**: usa `vendas.acumuladoMatriculas` / meta de matrículas do relatório.
+- Quando vê 18 clickCompra e 2 novasDia: NÃO diga "18 matrículas". Diga "18 intent-clicks geraram 2 matrículas no dia (conv intent→matrícula 11%)".
+- Se click_compra alto e novasDia baixo, o problema está no **checkout** (Engaged) ou na LP convertendo curiosos demais — não no tráfego.

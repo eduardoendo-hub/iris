@@ -1,36 +1,40 @@
-# Plano de Marketing — Campanha Curso Claude Pro (Turma 2 — Julho/2026)
+# Plano de Marketing — Curso Claude Pro (manual de jogo, evergreen)
 
-## Meta global
+> EVERGREEN: estratégia, benchmarks e critérios de decisão que valem pra
+> QUALQUER turma. As metas, o budget e as datas REAIS da turma vigente vêm do
+> relatório do dia (campanha ACTIVE no banco) e do "PLANO DA CAMPANHA" quando
+> presente. NUNCA use números absolutos deste arquivo como meta — use os do
+> relatório.
 
-| Métrica | Alvo |
-|---|---|
-| **Matrículas** | 30 |
-| **Receita** | R$ 50.970 (30 × R$ 1.699) — conferir meta no relatório/DB |
-| **Investimento mídia total** | R$ 9.000 |
-| **CAC máximo** | R$ 300 |
-| **ROAS alvo** | 5,0× |
-| **CPL alvo** | R$ 32–36 |
-| **Conversão lead → matrícula** | 11–12% |
+## Metas
 
-## Janela temporal
+As metas da turma vigente (matrículas, receita, CAC máximo, ROAS alvo, CPL alvo,
+budget de mídia) vêm SEMPRE do relatório do dia. Conversão lead→matrícula
+saudável de referência: **11–12%**.
 
-- **05/06 → 18/06** — Fase descoberta + validação (público frio, hook + autoridade).
-- **19/06 → 29/06** — Escala dos vencedores + adicionar urgência moderada.
-- **30/06 → 06/07** — Sprint final: urgência forte, "últimas vagas", remarketing agressivo.
-- **07/07 → 10/07** — Turma rodando, sem mídia paga.
+## Janela temporal (fases relativas à campanha)
 
-## Distribuição do budget de R$ 9.000
+Mapeie estas fases sobre a janela real `[início, fim de matrículas)` do relatório:
 
-| Canal | Verba | % | Objetivo |
-|---|---:|---:|---|
-| Meta prospecting (M1) | 3.600 | 40% | Frio: Reels/carrossel "Pare de perguntar para a IA" |
-| Meta remarketing (M2) | 1.260 | 14% | Visitantes da LP + engajados: "Garanta sua vaga" |
-| Google Search alta intenção (G1) | 2.340 | 26% | "curso claude pro", "como usar claude na empresa", "agentes IA curso" |
-| Google Search complementar (G2) | 630 | 7% | "curso ia para gestores", "automatizar com IA" |
-| Google Display/PMax remarketing (G3) | 270 | 3% | Visitas LP que não converteram |
-| **Reserva pra escala/teste** | 900 | 10% | Movido pra criativo vencedor ou novo canal |
+- **Primeiro ~40% da janela** — Descoberta + validação (público frio, hook + autoridade). Volume baixo nos 2–3 primeiros dias é esperado (algoritmo aprendendo).
+- **~40%–80% da janela** — Escala dos vencedores + urgência moderada.
+- **Últimos ~20% da janela** — Sprint final: urgência forte, "últimas vagas", remarketing agressivo.
+- **Após o fim das matrículas** — Turma rodando, sem mídia paga.
 
-## KPIs operacionais por canal
+## Distribuição de budget (proporções, não valores fixos)
+
+Aplique estes percentuais sobre o budget de mídia REAL da campanha:
+
+| Canal | % | Objetivo |
+|---|---:|---|
+| Meta prospecting (M1) | 40% | Frio: Reels/carrossel "Pare de perguntar para a IA" |
+| Meta remarketing (M2) | 14% | Visitantes da LP + engajados: "Garanta sua vaga" |
+| Google Search alta intenção (G1) | 26% | "curso claude pro", "como usar claude na empresa", "agentes IA curso" |
+| Google Search complementar (G2) | 7% | "curso ia para gestores", "automatizar com IA" |
+| Google Display/PMax remarketing (G3) | 3% | Visitas LP que não converteram |
+| Reserva pra escala/teste | 10% | Movido pra criativo vencedor ou novo canal |
+
+## KPIs operacionais por canal (benchmarks)
 
 | Canal | CPM esperado | CTR alvo | CPC alvo | CPL alvo | Conversão LP→Compra |
 |---|---:|---:|---:|---:|---:|
@@ -39,19 +43,21 @@
 | Google Search | n/a | >8% | R$ 4–8 | R$ 25–40 | 5–10% |
 | Google PMax | R$ 8–18 | >0.5% | R$ 1,50–4,00 | R$ 35–60 | 2–4% |
 
+(CPL "alvo" acima é referência de mercado; o CPL alvo OFICIAL da campanha vem do relatório.)
+
 ## Convenções de naming
 
-- **Meta**: `M1-PROSP-CLAUDEPRO-JUL26` (M1 = Meta lote 1, depois M2 etc.)
-- **Google**: `G1-SEARCH-CLAUDEPRO-JUL26`, `G2-SEARCH-CLAUDEPRO-JUL26`, `G3-PMAX-CLAUDEPRO-JUL26`
-- **utm_content do criativo**: `M1-VIDEO-CLAUDEPRO-PARE-PERGUNTAR`, `M1-CAR-CLAUDEPRO-20PROJETOS`, etc.
-- **CLAUDEPRO** é o substring que o IRIS usa pra filtrar campanhas (multi-produto na mesma Ad Account).
+- **`CLAUDEPRO`** é o substring que o IRIS usa pra filtrar campanhas Meta/Google
+  (multi-produto na mesma Ad Account) — estável entre turmas.
+- Sufixo de turma no nome (ex: mês/ano) varia por lançamento; não dependa dele.
+- Exemplos de estrutura: `M1-PROSP-CLAUDEPRO-...` (Meta lote 1), `G1-SEARCH-CLAUDEPRO-...` (Google). utm_content do criativo descreve o ângulo (ex: `...-PARE-PERGUNTAR`, `...-20PROJETOS`).
 
 ## Critérios de decisão (gestão de tráfego)
 
 ### Pausar criativo
 - **CTR < 0,8%** após 1.000 impressões → matar
 - **CPL > 2× alvo** após 50 cliques → matar
-- **Frequência > 4,0** em prospecting → matar (fatiga)
+- **Frequência > 4,0** em prospecting → matar (fadiga)
 - **0 visitas pro LP** após R$ 100 gastos → matar (algo errado no link/criativo)
 
 ### Escalar criativo
@@ -64,19 +70,19 @@
 - **Search G1 supera Meta M1 em ROAS** → mover 20% Meta → Google
 - Nunca mover mais de 30% do budget de um canal por dia (evita whiplash)
 
-## Marcos críticos da campanha
+## Marcos críticos (relativos ao dia da campanha)
 
-- **Dia 1 (05/06)** — Subir Meta M1 + Google G1. Validar tracking E2E. Métricas só significativas a partir de dia 3.
-- **Dia 3 (07/06)** — Primeira leitura: qual criativo deve ser pausado, qual escalar.
-- **Dia 7 (11/06)** — Segundo lote criativo Meta (variações dos vencedores).
-- **Dia 14 (18/06)** — Reavaliação geral. Sprint final começa fim de junho.
-- **Dia 25 (30/06)** — Início do "lote urgência" — criativos de últimos dias.
-- **Dia ~29 (03–06/07)** — Push final 72h, remarketing agressivo (matrículas até 06/07).
+- **Dia 1** — Subir Meta M1 + Google G1. Validar tracking E2E. Métricas só significativas a partir do dia 3.
+- **Dia 3** — Primeira leitura: qual criativo pausar, qual escalar.
+- **Dia 7** — Segundo lote criativo Meta (variações dos vencedores).
+- **Metade da janela** — Reavaliação geral; preparar sprint final.
+- **Últimos ~7 dias** — "Lote urgência": criativos de últimos dias.
+- **Últimas 72h** — Push final, remarketing agressivo (até o fim das matrículas).
 
 ## Pontos de atenção / red flags
 
 - **Taxa de conversão LP→Compra < 1%** após 200 visitas → problema na LP, não no tráfego.
-- **CAC subindo dia a dia** → fatiga de público; rotacionar criativo ou expandir audiência.
+- **CAC subindo dia a dia** → fadiga de público; rotacionar criativo ou expandir audiência.
 - **Spend Meta cresce mas leads não** → otimização do algoritmo pra audiência errada; revisar conjunto.
 - **Google Search CTR caindo** → competição subiu, revisar lance e copy do anúncio.
 - **CPL ok mas matrículas baixas** → problema no funil pós-clique (LP, checkout, ou SDR).

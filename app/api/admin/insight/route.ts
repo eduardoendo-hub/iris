@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
       productSlug,
       campaignSlug: ctx.campaignSlug,
       campaignName: ctx.campaignName,
+      campaignPlan: ctx.marketingPlan,
       analysisDateUTC,
       campaignStartISO: ctx.startISO,
       campaignEnrollmentEndISO: ctx.endISO,
