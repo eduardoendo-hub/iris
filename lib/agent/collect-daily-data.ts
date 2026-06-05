@@ -232,8 +232,17 @@ export async function collectDailySnapshot(opts: {
   const cacDia = novasDia > 0 ? spendDia / novasDia : null;
   const roasDia = spendDia > 0 ? receitaDia / spendDia : null;
 
+  // Acumulado da CAMPANHA vigente — escopado à janela [campaignStart, dia+1).
+  // Sem isso, contava TODAS as vendas do produto (somando turmas anteriores —
+  // ex: turma de maio inflava "47/30" da turma de julho).
+  const campaignStartUTC = opts.campaignStartISO
+    ? new Date(opts.campaignStartISO + "T03:00:00.000Z")
+    : null;
   const vendasTotalAgg = await prisma.sale.aggregate({
-    where: { productSlug },
+    where: {
+      productSlug,
+      ...(campaignStartUTC ? { saleDate: { gte: campaignStartUTC, lt: dayEndUTC } } : {}),
+    },
     _sum: { amount: true },
     _count: { _all: true },
   });

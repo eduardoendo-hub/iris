@@ -13,17 +13,21 @@
 
 ## Ticket e oferta
 
-- **Preço cheio**: R$ 1.800
-- **Preço com desconto (atual)**: R$ 1.499
+- **Preço cheio**: R$ 4.000
+- **Preço com desconto (atual)**: R$ 1.699
 - **Bônus 20 primeiros**: 1h extra ao vivo com instrutor
 - **Forma de pagamento**: à vista ou parcelado no checkout Engaged
 
-## Datas da campanha
+## Datas da campanha (Turma 2 — Julho/2026)
 
-- **Início mídia paga**: 2026-05-11 (segunda)
-- **Início da turma**: 2026-06-08 (segunda)
-- **Fim da turma**: 2026-06-12 (sexta) — 5 dias úteis seg-sex
-- **Fim de matrículas**: 2026-06-07 (domingo, 23h59)
+- **Início mídia paga**: 2026-06-05 (sexta) — início da janela da campanha
+- **Início da turma**: 2026-07-06 (segunda)
+- **Fim da turma**: 2026-07-10 (sexta) — 5 dias úteis seg-sex
+- **Fim de matrículas**: 2026-07-06 (segunda)
+
+> As datas/metas EXATAS da campanha vigente vêm do relatório do dia (resolvidas
+> da campanha ACTIVE no banco). Estes valores são só contexto; em divergência,
+> valem os do relatório.
 
 ## Promessa central / hook
 
@@ -49,22 +53,22 @@ O insight é: a maioria das pessoas usa Claude/ChatGPT só como chat avançado (
 ## Objeções comuns na LP
 
 - **"Preciso saber programar?"** → Não. Reforçar isso no criativo e na LP.
-- **"R$ 1.499 é caro"** → Comparar com 1h de consultoria (R$ 500+) ou ROI do primeiro projeto.
+- **"R$ 1.699 é caro"** → Comparar com 1h de consultoria (R$ 500+) ou ROI do primeiro projeto.
 - **"Só 5 dias dá tempo?"** → 20 projetos provam densidade. Reforçar.
 - **"Já uso ChatGPT/Claude"** → Esse é o gatilho central — você usa como chat, vai aprender a usar como sistema.
 
 ## CTAs da LP
 
-- **Hero**: "Quero me matricular · ~~R$ 1.800~~ R$ 1.499"
-- **Final**: "Garantir minha vaga · ~~R$ 1.800~~ R$ 1.499"
-- **Sticky mobile**: "Quero me matricular" (turma 08/06)
+- **Hero**: "Quero me matricular · ~~R$ 4.000~~ R$ 1.699"
+- **Final**: "Garantir minha vaga · ~~R$ 4.000~~ R$ 1.699"
+- **Sticky mobile**: "Quero me matricular" (turma 06/07)
 - **Botão WhatsApp**: "Falar com especialista" (envia pra consultor SDR)
 - **Form "Falar com especialista"**: cria Lead em RD Station CRM via `integracao-rd`
 
 ## Pipeline de monetização
 
 ```
-LP → click_compra → checkout Engaged (https://impacta.site.engaged.com.br/p/checkout/x68jpj7w3k)
+LP → click_compra → checkout Engaged (https://impacta.site.engaged.com.br/p/checkout/72rspa5wc8)
    → pagamento → webhook → /api/webhook/engaged → Sale criada no IRIS
 ```
 

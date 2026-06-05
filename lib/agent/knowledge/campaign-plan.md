@@ -1,11 +1,11 @@
-# Plano de Marketing — Campanha Curso Claude Pro Maio/Junho 2026
+# Plano de Marketing — Campanha Curso Claude Pro (Turma 2 — Julho/2026)
 
 ## Meta global
 
 | Métrica | Alvo |
 |---|---|
 | **Matrículas** | 30 |
-| **Receita** | R$ 44.970 (30 × R$ 1.499) |
+| **Receita** | R$ 50.970 (30 × R$ 1.699) — conferir meta no relatório/DB |
 | **Investimento mídia total** | R$ 9.000 |
 | **CAC máximo** | R$ 300 |
 | **ROAS alvo** | 5,0× |
@@ -14,10 +14,10 @@
 
 ## Janela temporal
 
-- **11/05 → 24/05** — Fase descoberta + validação (público frio, hook + autoridade).
-- **25/05 → 04/06** — Escala dos vencedores + adicionar urgência moderada.
-- **05/06 → 07/06** — Sprint final: urgência forte, "últimas vagas", remarketing agressivo.
-- **08/06 → 12/06** — Turma rodando, sem mídia paga.
+- **05/06 → 18/06** — Fase descoberta + validação (público frio, hook + autoridade).
+- **19/06 → 29/06** — Escala dos vencedores + adicionar urgência moderada.
+- **30/06 → 06/07** — Sprint final: urgência forte, "últimas vagas", remarketing agressivo.
+- **07/07 → 10/07** — Turma rodando, sem mídia paga.
 
 ## Distribuição do budget de R$ 9.000
 
@@ -41,8 +41,8 @@
 
 ## Convenções de naming
 
-- **Meta**: `M1-PROSP-CLAUDEPRO-MAI26` (M1 = Meta lote 1, depois M2 etc.)
-- **Google**: `G1-SEARCH-CLAUDEPRO-MAI26`, `G2-SEARCH-CLAUDEPRO-MAI26`, `G3-PMAX-CLAUDEPRO-MAI26`
+- **Meta**: `M1-PROSP-CLAUDEPRO-JUL26` (M1 = Meta lote 1, depois M2 etc.)
+- **Google**: `G1-SEARCH-CLAUDEPRO-JUL26`, `G2-SEARCH-CLAUDEPRO-JUL26`, `G3-PMAX-CLAUDEPRO-JUL26`
 - **utm_content do criativo**: `M1-VIDEO-CLAUDEPRO-PARE-PERGUNTAR`, `M1-CAR-CLAUDEPRO-20PROJETOS`, etc.
 - **CLAUDEPRO** é o substring que o IRIS usa pra filtrar campanhas (multi-produto na mesma Ad Account).
 
@@ -66,12 +66,12 @@
 
 ## Marcos críticos da campanha
 
-- **Dia 1 (11/05)** — Subir Meta M1 + Google G1. Validar tracking E2E. Métricas só significativas a partir de dia 3.
-- **Dia 3 (13/05)** — Primeira leitura: qual criativo deve ser pausado, qual escalar.
-- **Dia 7 (17/05)** — Segundo lote criativo Meta (variações dos vencedores).
-- **Dia 14 (24/05)** — Reavaliação geral. Sprint final começa em 25/05.
-- **Dia 21 (31/05)** — Início do "lote urgência" — criativos de últimos dias.
-- **Dia 26 (05/06)** — Push final 72h, remarketing agressivo.
+- **Dia 1 (05/06)** — Subir Meta M1 + Google G1. Validar tracking E2E. Métricas só significativas a partir de dia 3.
+- **Dia 3 (07/06)** — Primeira leitura: qual criativo deve ser pausado, qual escalar.
+- **Dia 7 (11/06)** — Segundo lote criativo Meta (variações dos vencedores).
+- **Dia 14 (18/06)** — Reavaliação geral. Sprint final começa fim de junho.
+- **Dia 25 (30/06)** — Início do "lote urgência" — criativos de últimos dias.
+- **Dia ~29 (03–06/07)** — Push final 72h, remarketing agressivo (matrículas até 06/07).
 
 ## Pontos de atenção / red flags
 
