@@ -39,6 +39,11 @@ const ALLOWED_ORIGINS = new Set([
   // Código Zero
   "https://codigozero.technowhub.ai",    // canonico (LP servida aqui)
   "https://codigozero.impacta.com.br",   // redirect -> technowhub
+  // Dominio publico da Impacta — a LP do Código Zero (e futuras) e servida em
+  // www.impacta.com.br/cursos/<slug> via proxy. Sem esta origem, o /api/events
+  // dava CORS/503 quando o anuncio aponta pra URL da impacta.com.br.
+  "https://www.impacta.com.br",
+  "https://impacta.com.br",
   // ADV-IA
   "https://advia.technowhub.ai",         // canonico (LP servida aqui)
   "https://advia.impacta.com.br",        // redirect -> technowhub
