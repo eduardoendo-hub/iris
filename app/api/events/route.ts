@@ -50,6 +50,8 @@ const ALLOWED_ORIGINS = new Set([
   // MBA Academy AI Master (Experience Labs)
   "https://mbaacademy.technowhub.ai",    // canonico (LP servida aqui)
   "https://mbaacademy.impacta.com.br",   // redirect -> technowhub
+  // QA Next (Qualidade, Automacao e IA) — turma agosto/2026
+  "https://qanext.impacta.com.br",       // canonico (LP servida via Coolify)
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev

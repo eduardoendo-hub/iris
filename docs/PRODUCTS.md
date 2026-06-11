@@ -38,6 +38,22 @@ curl -s -H "X-Admin-Secret: <secret>" https://iris.technowhub.ai/api/admin/produ
 | **Campanha fim** | `2026-06-08` | data limite ads + matrículas |
 | **Ticket** | `R$ 1.499,00` | preço da matrícula |
 
+### `qa-next` — QA Next (Qualidade, Automação e IA)
+
+| Fonte | Identificador | Onde no payload/UI |
+|---|---|---|
+| **IRIS slug** | `qa-next` | URL `?product=qa-next`, FK em tabelas |
+| **LP URL (canônico)** | `https://qanext.impacta.com.br` | repo `eduardoendo-hub/qa-next` (Coolify/nginx) |
+| **UTM campaign** | `qa-next-agosto-2026` | querystring da LP |
+| **Meta Ads filter** | `QANEXT` (substring) | `campaign.name` na ad account |
+| **Google Ads filter** | `QANEXT` (substring) | `campaign.name` no MCC |
+| **Engaged sharedId** | `tm8cdtdrbf` | `checkout.sharedId` no payload |
+| **Engaged productId** | _(pendente — pegar de webhook real)_ | `checkout.invoiceItems[].product._id` |
+| **Engaged checkout URL** | `https://impacta.site.engaged.com.br/p/checkout/tm8cdtdrbf` | redirect dos CTAs de matrícula |
+| **Pixel Meta** | _(pendente)_ | `app.js` `CFG.META_PIXEL_ID` |
+| **Lotes** | R$ 697 / 897 / 997 | pioneiro · regular · reta final |
+| **Curso** | `2026-08-03` a `2026-08-08` | 5 noites + sábado CTFL |
+
 ### Próximos produtos (descomentar em `lib/products.ts` quando entrarem)
 
 #### `direito5` — Direito 5.0

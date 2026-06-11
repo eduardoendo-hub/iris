@@ -138,6 +138,24 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     engagedCheckoutSharedIds: ["w4uz6kh4cj"],
   },
 
+  "qa-next": {
+    slug: "qa-next",
+    name: "QA Next",
+    // LP servida em qanext.impacta.com.br (Coolify, nginx). Imersao QA +
+    // automacao (Playwright) + IA, turma agosto/2026. Repo: eduardoendo-hub/qa-next.
+    lpUrl: "https://qanext.impacta.com.br",
+    // Convencao esperada nas campanhas Meta/Google: nome contendo "QANEXT"
+    // (ex.: "M1-PROSP-QANEXT-AGO26", "G1-SEARCH-QANEXT-AGO26").
+    metaCampaignFilter: "QANEXT",
+    googleCampaignFilter: "QANEXT",
+    campaignSlug: "qa-next-agosto-2026",
+    // Engaged checkout SharedID — extraido do BUY_URL da LP:
+    //   https://impacta.site.engaged.com.br/p/checkout/tm8cdtdrbf
+    engagedCheckoutSharedIds: ["tm8cdtdrbf"],
+    // engagedProductIds: preencher com product._id de um webhook real do Engaged
+    // (ou painel Engaged) apos a primeira venda — fallback de atribuicao.
+  },
+
   // Future products — descomentar quando entrarem:
   //
   // "direito5": {
