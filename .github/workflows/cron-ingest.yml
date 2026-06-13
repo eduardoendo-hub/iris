@@ -13,6 +13,9 @@ on:
     # GA4: a cada 15min (sessions/eventos historicos pra preencher gap
     # do PUSH de /api/events em caso de falha; redundancia barata)
     - cron: "*/15 * * * *"
+    # Daily-insight (analise de IA): 1x/dia as 08:00 UTC = 05:00 SP.
+    # Gera o insight estrategico de ONTEM pra todos os produtos com campanha ativa.
+    - cron: "0 8 * * *"
   workflow_dispatch:
 
 jobs:
@@ -60,3 +63,20 @@ jobs:
             -H "User-Agent: github-actions-cron-iris" \
             -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"
         continue-on-error: true # Google Ads cred opcional ate user plugar
+
+  daily-insight:
+    name: Daily insight (análise de IA, todos os produtos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Roda só no cron diário 08:00 UTC (05:00 SP) ou disparo manual — NÃO no */15.
+    # Antes dependia de um Scheduled Task do Coolify que parou de disparar.
+    if: ${{ github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: POST /api/cron/daily-insight
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -X POST "https://iris.technowhub.ai/api/cron/daily-insight" \
+            -H "X-Cron-Secret: ${{ secrets.IRIS_CRON_SECRET }}" \
+            -H "User-Agent: github-actions-cron-iris" \
+            --max-time 600 \
+            -w "\n[http_code: %{http_code}, time: %{time_total}s]\n"
