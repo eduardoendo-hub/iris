@@ -52,6 +52,10 @@ const ALLOWED_ORIGINS = new Set([
   "https://mbaacademy.impacta.com.br",   // redirect -> technowhub
   // QA Next (Qualidade, Automacao e IA) — turma agosto/2026
   "https://qanext.impacta.com.br",       // canonico (LP servida via Coolify)
+  // Corporativo (produto unico 'corporativo') — hub institucional + pagina de IA.
+  // Ambas reportam product_slug='corporativo' pra agregar numa campanha so.
+  "https://corporate.technowhub.ai",     // hub corporativo
+  "https://ia-corporate.technowhub.ai",  // pagina de IA corporativa
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev
