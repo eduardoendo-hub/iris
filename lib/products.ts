@@ -156,6 +156,20 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // (ou painel Engaged) apos a primeira venda — fallback de atribuicao.
   },
 
+  "corporativo": {
+    slug: "corporativo",
+    name: "Corporativo",
+    // Produto UNICO que agrega o hub institucional + a pagina de IA.
+    // Ambas as LPs reportam product_slug='corporativo' (ver /api/events).
+    // Hub: corporate.technowhub.ai · IA: ia-corporate.technowhub.ai
+    lpUrl: "https://corporate.technowhub.ai",
+    // Convencao pra futuras campanhas Meta/Google: nome contendo "CORPORATIVO".
+    metaCampaignFilter: "CORPORATIVO",
+    googleCampaignFilter: "CORPORATIVO",
+    campaignSlug: "corporativo",
+    // Sem Engaged: corporate gera LEADS (form -> RD Station), nao vendas Engaged.
+  },
+
   // Future products — descomentar quando entrarem:
   //
   // "direito5": {
