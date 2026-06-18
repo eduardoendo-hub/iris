@@ -58,8 +58,18 @@ function verifySignature(rawBody: string, signature: string | null): boolean {
   }
 }
 
+// Aliases de campanha → produto único no cockpit. Hub e página de IA reportam
+// product_slug='corporativo' nos eventos; aqui unificamos os LEADS também
+// (a página de IA usa campaign_slug='corporativo-ia' p/ segmentar no RD CRM,
+// mas no IRIS cai sob o mesmo produto 'corporativo'). O campaignSlug original
+// continua salvo no Lead, então dá pra distinguir IA × hub na lista.
+const CAMPAIGN_PRODUCT_ALIASES: Record<string, string> = {
+  "corporativo-ia": "corporativo",
+};
+
 function productSlugFromCampaign(campaignSlug: string | undefined): string {
   if (!campaignSlug) return "unknown";
+  if (CAMPAIGN_PRODUCT_ALIASES[campaignSlug]) return CAMPAIGN_PRODUCT_ALIASES[campaignSlug];
   // "claude-pro-maio-2026" → "claude-pro" (prefixo até a primeira data/sufixo)
   return campaignSlug.replace(/-(?:maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|janeiro|fevereiro|março|abril)-\d{4}$/i, "");
 }
