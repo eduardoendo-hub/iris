@@ -14,6 +14,8 @@ const TrackedPatch = z.object({
   active: z.boolean().optional(),
   label: z.string().min(2).max(120).optional(),
   objective: z.string().nullable().optional(),
+  utmCampaign: z.string().nullable().optional(),
+  campaignId: z.string().nullable().optional(),
   targetCpl: z.coerce.number().nonnegative().nullable().optional(),
   targetRoas: z.coerce.number().nonnegative().nullable().optional(),
 });

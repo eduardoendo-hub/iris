@@ -120,7 +120,7 @@ export default async function AdminPage() {
             href="/admin/tracked-campaigns"
             title="Campanhas rastreadas"
             subtitle={`${trackedActive} ativa${trackedActive === 1 ? "" : "s"}`}
-            description="Registro das campanhas de mídia (Meta + Google) que o Gestor de Tráfego acompanha: ID/filtro, utm_campaign, meta de CPL/ROAS."
+            description="Visão global (read-only) das campanhas de mídia atreladas. O vínculo é feito dentro de cada campanha → seção Mídia paga."
           />
         </div>
 

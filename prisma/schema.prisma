@@ -107,6 +107,9 @@ model Campaign {
 
   // Acesso por campanha — back-relation
   allowedEmails AllowedEmailCampaign[]
+
+  // Campanhas de mídia paga (Meta/Google) atreladas a esta campanha da IRIS.
+  mediaCampaigns TrackedCampaign[]
 }
 
 enum CampaignStatus {
@@ -636,14 +639,19 @@ model TrackedCampaign {
   productSlug String?  // vincula ao produto IRIS (opcional)
   label       String   // nome amigável exibido no cockpit
   objective   String?  // "trafego" | "conversao" | ...
-  targetCpl   Decimal? @db.Decimal(15, 2) // meta de CPL (R$) p/ as regras do agente
+  targetCpl   Decimal? @db.Decimal(15, 2) // meta de CPL override (senão usa goalCpl da Campaign)
   targetRoas  Decimal? @db.Decimal(8, 2)
   active      Boolean  @default(true)
+  // Vínculo com a campanha da IRIS (turma/lançamento). Uma Campaign tem N
+  // campanhas de mídia (Meta/Google); o Gestor de Tráfego agrupa por aqui.
+  campaignId  String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@unique([platform, accountId, externalId])
   @@index([active])
+  @@index([campaignId])
 }
 
 // Métricas de mídia POR CAMPANHA (granular) — alimenta o Gestor de Tráfego.

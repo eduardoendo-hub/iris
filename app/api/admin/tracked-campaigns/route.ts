@@ -32,6 +32,7 @@ const TrackedCreate = z.object({
   objective: nstr.optional(),
   targetCpl: nnum.optional(),
   targetRoas: nnum.optional(),
+  campaignId: nstr.optional(),
   active: z.boolean().optional(),
 });
 
@@ -40,7 +41,9 @@ export async function GET(req: NextRequest) {
   if (!a.authorized) {
     return NextResponse.json({ error: "unauthorized", reason: a.reason }, { status: 401 });
   }
+  const campaignId = new URL(req.url).searchParams.get("campaignId");
   const items = await prisma.trackedCampaign.findMany({
+    where: campaignId ? { campaignId } : undefined,
     orderBy: [{ active: "desc" }, { platform: "asc" }, { createdAt: "desc" }],
   });
   return NextResponse.json({ items });
@@ -75,6 +78,7 @@ export async function POST(req: NextRequest) {
         objective: d.objective ?? null,
         targetCpl: d.targetCpl ?? null,
         targetRoas: d.targetRoas ?? null,
+        campaignId: d.campaignId ?? null,
         active: d.active ?? true,
       },
     });

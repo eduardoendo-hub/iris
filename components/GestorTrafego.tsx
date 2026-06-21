@@ -18,21 +18,29 @@ export type RecItem = {
   status: string;
 };
 
-export type CarteiraRow = {
-  label: string;
+export type ChildRow = {
   platform: string;
+  label: string;
   campaignName: string | null;
   spend7d: number;
   impressions7d: number;
   clicks7d: number;
   ctr7d: number;
   cpc7d: number;
+  daysWithData: number;
+};
+
+export type IrisRow = {
+  name: string;
+  productSlug: string;
+  status: string;
+  goalCpl: number | null;
+  spend7d: number;
   visits7d: number;
   leads7d: number;
   cpl7d: number | null;
-  targetCpl: number | null;
-  daysWithData: number;
-  hasLpJoin: boolean;
+  cplVsGoalPct: number | null;
+  children: ChildRow[];
 };
 
 const fmtBRL = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -56,9 +64,9 @@ export function GestorTrafego({
 }: {
   analysisDate: string | null;
   recommendations: RecItem[];
-  carteira: CarteiraRow[];
+  carteira: IrisRow[];
   notes: string[];
-  totals: { activeCampaigns: number; spend7d: number; leads7d: number; blendedCpl: number | null };
+  totals: { irisCampaigns: number; platformCampaigns: number; spend7d: number; leads7d: number; blendedCpl: number | null };
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -104,7 +112,7 @@ export function GestorTrafego({
         <div>
           <h1 className="text-2xl font-bold">Gestor de Tráfego</h1>
           <p className="text-sm opacity-60">
-            {analysisDate ? `Análise de ${analysisDate}` : "Nenhuma análise ainda"} · {totals.activeCampaigns} campanhas ativas ·
+            {analysisDate ? `Análise de ${analysisDate}` : "Nenhuma análise ainda"} · {totals.irisCampaigns} campanhas IRIS ({totals.platformCampaigns} de mídia) ·
             spend 7d {fmtBRL(totals.spend7d)} · {fmtNum(totals.leads7d)} leads ·
             CPL {totals.blendedCpl != null ? fmtBRL(totals.blendedCpl) : "—"}
           </p>
@@ -180,57 +188,71 @@ export function GestorTrafego({
         )}
       </section>
 
-      {/* Carteira */}
+      {/* Carteira — agrupada por campanha da IRIS */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide opacity-70">Carteira (campanhas ativas)</h2>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide opacity-70">Carteira (por campanha da IRIS)</h2>
         {carteira.length === 0 ? (
-          <p className="text-sm opacity-60">Nenhuma campanha rastreada. Cadastre em Campanhas rastreadas.</p>
+          <p className="text-sm opacity-60">
+            Nenhuma campanha IRIS ativa com mídia vinculada. Vincule as campanhas de Meta/Google na tela de cada campanha.
+          </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-white/10">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase opacity-50">
-                <tr>
-                  <th className="px-3 py-2">Campanha</th>
-                  <th className="px-3 py-2">Plat.</th>
-                  <th className="px-3 py-2">Spend 7d</th>
-                  <th className="px-3 py-2">Impr</th>
-                  <th className="px-3 py-2">Cliq</th>
-                  <th className="px-3 py-2">CTR</th>
-                  <th className="px-3 py-2">CPC</th>
-                  <th className="px-3 py-2">Visitas</th>
-                  <th className="px-3 py-2">Leads</th>
-                  <th className="px-3 py-2">CPL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {carteira.map((c, i) => (
-                  <tr key={i} className="border-t border-white/5">
-                    <td className="px-3 py-2 font-medium">
-                      {c.label}
-                      {c.daysWithData === 0 && <span className="ml-1 text-[11px] text-yellow-400/70">(sem dados)</span>}
-                    </td>
-                    <td className="px-3 py-2 opacity-70">{c.platform === "META" ? "Meta" : "Google"}</td>
-                    <td className="px-3 py-2">{fmtBRL(c.spend7d)}</td>
-                    <td className="px-3 py-2 opacity-70">{fmtNum(c.impressions7d)}</td>
-                    <td className="px-3 py-2 opacity-70">{fmtNum(c.clicks7d)}</td>
-                    <td className="px-3 py-2 opacity-70">{c.ctr7d.toFixed(2)}%</td>
-                    <td className="px-3 py-2 opacity-70">{fmtBRL(c.cpc7d)}</td>
-                    <td className="px-3 py-2 opacity-70">{c.hasLpJoin ? fmtNum(c.visits7d) : "—"}</td>
-                    <td className="px-3 py-2 opacity-70">{c.hasLpJoin ? fmtNum(c.leads7d) : "—"}</td>
-                    <td className="px-3 py-2">
-                      {c.cpl7d != null ? (
-                        <span className={c.targetCpl != null && c.cpl7d > c.targetCpl ? "text-orange-300" : "text-green-400"}>
-                          {fmtBRL(c.cpl7d)}
-                        </span>
-                      ) : (
-                        <span className="opacity-40">{c.hasLpJoin ? "0 lead" : "sem utm"}</span>
-                      )}
-                      {c.targetCpl != null && <span className="ml-1 text-[11px] opacity-40">/ {fmtBRL(c.targetCpl)}</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-col gap-4">
+            {carteira.map((ic, i) => (
+              <div key={i} className="overflow-hidden rounded-xl border border-white/10">
+                {/* Header da campanha IRIS */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-white/10 bg-white/[0.03] px-3 py-2">
+                  <span className="font-semibold">{ic.name}</span>
+                  <span className="text-xs opacity-50">{ic.productSlug} · {ic.status}</span>
+                  <span className="ml-auto text-xs opacity-80">spend {fmtBRL(ic.spend7d)}</span>
+                  <span className="text-xs opacity-80">{fmtNum(ic.visits7d)} visitas</span>
+                  <span className="text-xs opacity-80">{fmtNum(ic.leads7d)} leads</span>
+                  <span className="text-xs">
+                    CPL{" "}
+                    {ic.cpl7d != null ? (
+                      <span className={ic.goalCpl != null && ic.cpl7d > ic.goalCpl ? "text-orange-300" : "text-green-400"}>{fmtBRL(ic.cpl7d)}</span>
+                    ) : (
+                      <span className="opacity-40">{ic.leads7d === 0 ? "0 lead" : "—"}</span>
+                    )}
+                    {ic.goalCpl != null && <span className="opacity-40"> / {fmtBRL(ic.goalCpl)}</span>}
+                    {ic.cplVsGoalPct != null && (
+                      <span className={ic.cplVsGoalPct > 0 ? "text-orange-300" : "text-green-400"}>
+                        {" "}({ic.cplVsGoalPct >= 0 ? "+" : ""}{ic.cplVsGoalPct.toFixed(0)}%)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {/* Mídia atrelada */}
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase opacity-40">
+                    <tr>
+                      <th className="px-3 py-1.5">Mídia</th>
+                      <th className="px-3 py-1.5">Plat.</th>
+                      <th className="px-3 py-1.5">Spend 7d</th>
+                      <th className="px-3 py-1.5">Impr</th>
+                      <th className="px-3 py-1.5">Cliq</th>
+                      <th className="px-3 py-1.5">CTR</th>
+                      <th className="px-3 py-1.5">CPC</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ic.children.map((c, j) => (
+                      <tr key={j} className="border-t border-white/5">
+                        <td className="px-3 py-1.5">
+                          {c.label}
+                          {c.daysWithData === 0 && <span className="ml-1 text-[11px] text-yellow-400/70">(sem dados)</span>}
+                        </td>
+                        <td className="px-3 py-1.5 opacity-70">{c.platform === "META" ? "Meta" : "Google"}</td>
+                        <td className="px-3 py-1.5">{fmtBRL(c.spend7d)}</td>
+                        <td className="px-3 py-1.5 opacity-70">{fmtNum(c.impressions7d)}</td>
+                        <td className="px-3 py-1.5 opacity-70">{fmtNum(c.clicks7d)}</td>
+                        <td className="px-3 py-1.5 opacity-70">{c.ctr7d.toFixed(2)}%</td>
+                        <td className="px-3 py-1.5 opacity-70">{fmtBRL(c.cpc7d)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </div>
         )}
       </section>

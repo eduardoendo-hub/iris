@@ -9,7 +9,7 @@ import { auth } from "@/auth";
 import { Topbar } from "@/components/Topbar";
 import { prisma } from "@/lib/prisma";
 import { collectPortfolioSnapshot } from "@/lib/agent/collect-portfolio-data";
-import { GestorTrafego, type RecItem, type CarteiraRow } from "@/components/GestorTrafego";
+import { GestorTrafego, type RecItem, type IrisRow } from "@/components/GestorTrafego";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,21 +51,27 @@ export default async function GestorTrafegoPage() {
     }));
   }
 
-  const carteira: CarteiraRow[] = snapshot.campaigns.map((c) => ({
-    label: c.label,
-    platform: c.platform,
-    campaignName: c.campaignName,
-    spend7d: c.spend7d,
-    impressions7d: c.impressions7d,
-    clicks7d: c.clicks7d,
-    ctr7d: c.ctr7d,
-    cpc7d: c.cpc7d,
-    visits7d: c.visits7d,
-    leads7d: c.leads7d,
-    cpl7d: c.cpl7d,
-    targetCpl: c.targetCpl,
-    daysWithData: c.daysWithData,
-    hasLpJoin: c.hasLpJoin,
+  const carteira: IrisRow[] = snapshot.campaigns.map((b) => ({
+    name: b.name,
+    productSlug: b.productSlug,
+    status: b.status,
+    goalCpl: b.goalCpl,
+    spend7d: b.spend7d,
+    visits7d: b.visits7d,
+    leads7d: b.leads7d,
+    cpl7d: b.cpl7d,
+    cplVsGoalPct: b.cplVsGoalPct,
+    children: b.children.map((c) => ({
+      platform: c.platform,
+      label: c.label,
+      campaignName: c.campaignName,
+      spend7d: c.spend7d,
+      impressions7d: c.impressions7d,
+      clicks7d: c.clicks7d,
+      ctr7d: c.ctr7d,
+      cpc7d: c.cpc7d,
+      daysWithData: c.daysWithData,
+    })),
   }));
 
   return (
@@ -78,7 +84,8 @@ export default async function GestorTrafegoPage() {
           carteira={carteira}
           notes={snapshot.notes}
           totals={{
-            activeCampaigns: snapshot.totals.activeCampaigns,
+            irisCampaigns: snapshot.totals.irisCampaigns,
+            platformCampaigns: snapshot.totals.platformCampaigns,
             spend7d: snapshot.totals.spend7d,
             leads7d: snapshot.totals.leads7d,
             blendedCpl: snapshot.totals.blendedCpl,

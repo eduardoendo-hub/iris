@@ -22,7 +22,8 @@ export async function runGestorTrafego(opts: { days?: number; dryRun?: boolean; 
     ingest,
     snapshot: {
       analysisDate: snapshot.analysisDate,
-      activeCampaigns: snapshot.totals.activeCampaigns,
+      irisCampaigns: snapshot.totals.irisCampaigns,
+      platformCampaigns: snapshot.totals.platformCampaigns,
       spend7d: snapshot.totals.spend7d,
       leads7d: snapshot.totals.leads7d,
       notes: snapshot.notes,

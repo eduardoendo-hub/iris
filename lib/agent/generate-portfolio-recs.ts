@@ -13,7 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import type { PortfolioSnapshot, CampaignBlock } from "./collect-portfolio-data";
+import type { PortfolioSnapshot, IrisCampaignBlock, PlatformChild } from "./collect-portfolio-data";
 
 const MODEL = "claude-opus-4-7"; // mesmo do analista diário (já validado em prod)
 
@@ -121,13 +121,21 @@ const OUTPUT_SCHEMA = {
 const fmtBRL = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 const fmtNum = (n: number) => new Intl.NumberFormat("pt-BR").format(Math.round(n));
 
-function campaignLine(c: CampaignBlock): string {
-  const cpl = c.cpl7d != null ? fmtBRL(c.cpl7d) : (c.hasLpJoin ? "sem leads" : "sem utm");
-  const tgt = c.targetCpl != null ? `meta ${fmtBRL(c.targetCpl)}` : "sem meta";
+function childLine(c: PlatformChild): string {
   const trend = c.spendPrev7d > 0 ? `${c.spendTrendPct >= 0 ? "+" : ""}${c.spendTrendPct.toFixed(0)}% vs 7d ant.` : "novo";
-  return `- [${c.platform}] ${c.label}${c.campaignName ? ` (${c.campaignName})` : ""} · ${c.daysWithData}d dado
-    spend7d ${fmtBRL(c.spend7d)} (${trend}) · impr ${fmtNum(c.impressions7d)} · cliq ${fmtNum(c.clicks7d)} · CTR ${c.ctr7d.toFixed(2)}% · CPC ${fmtBRL(c.cpc7d)}
-    LP: visitas ${fmtNum(c.visits7d)} · leads ${fmtNum(c.leads7d)} · whats ${fmtNum(c.whats7d)} · CPL ${cpl} (${tgt})${c.cplVsTargetPct != null ? ` · ${c.cplVsTargetPct >= 0 ? "+" : ""}${c.cplVsTargetPct.toFixed(0)}% vs meta` : ""}`;
+  const leadPart = c.leads7d != null ? ` · leads ${fmtNum(c.leads7d)} · CPL ${c.cpl7d != null ? fmtBRL(c.cpl7d) : "—"}` : "";
+  return `    • [${c.platform}] ${c.label}${c.campaignName ? ` (${c.campaignName})` : ""} · ${c.daysWithData}d dado
+        spend7d ${fmtBRL(c.spend7d)} (${trend}) · impr ${fmtNum(c.impressions7d)} · cliq ${fmtNum(c.clicks7d)} · CTR ${c.ctr7d.toFixed(2)}% · CPC ${fmtBRL(c.cpc7d)}${leadPart}`;
+}
+
+function campaignBlock(b: IrisCampaignBlock): string {
+  const cpl = b.cpl7d != null ? fmtBRL(b.cpl7d) : b.leads7d === 0 ? "sem leads" : "—";
+  const goal = b.goalCpl != null ? `goalCPL ${fmtBRL(b.goalCpl)}` : "sem goalCPL";
+  const vsGoal = b.cplVsGoalPct != null ? ` · ${b.cplVsGoalPct >= 0 ? "+" : ""}${b.cplVsGoalPct.toFixed(0)}% vs meta` : "";
+  return `- CAMPANHA IRIS "${b.name}" [${b.productSlug} · ${b.status}]
+    Total 7d: spend ${fmtBRL(b.spend7d)} · visitas ${fmtNum(b.visits7d)} · leads ${fmtNum(b.leads7d)} · CPL ${cpl} (${goal})${vsGoal} · conv ${b.convVisitLead != null ? b.convVisitLead.toFixed(1) + "%" : "—"}
+    Mídia atrelada:
+${b.children.map(childLine).join("\n")}`;
 }
 
 function buildUserPrompt(s: PortfolioSnapshot): string {
@@ -136,13 +144,13 @@ function buildUserPrompt(s: PortfolioSnapshot): string {
   return `# CARTEIRA DE TRÁFEGO — ${s.analysisDate}
 
 ## VISÃO GERAL (7 dias)
-Campanhas ativas: ${t.activeCampaigns}
+Campanhas IRIS ativas: ${t.irisCampaigns} (${t.platformCampaigns} campanhas de mídia)
 Spend total 7d: ${fmtBRL(t.spend7d)} (Meta ${fmtBRL(t.metaSpend7d)} + Google ${fmtBRL(t.googleSpend7d)})
 Leads 7d: ${fmtNum(t.leads7d)} · CPL combinado: ${t.blendedCpl != null ? fmtBRL(t.blendedCpl) : "—"}
-Medianas da carteira: CPL ${m.cpl7d != null ? fmtBRL(m.cpl7d) : "—"} · CTR ${m.ctr7d != null ? m.ctr7d.toFixed(2) + "%" : "—"} · CPC ${m.cpc7d != null ? fmtBRL(m.cpc7d) : "—"}
+Medianas: CPL/campanha-IRIS ${m.cplIris7d != null ? fmtBRL(m.cplIris7d) : "—"} · CTR ${m.ctr7d != null ? m.ctr7d.toFixed(2) + "%" : "—"} · CPC ${m.cpc7d != null ? fmtBRL(m.cpc7d) : "—"}
 
-## CAMPANHAS
-${s.campaigns.length === 0 ? "(nenhuma campanha rastreada ativa)" : s.campaigns.map(campaignLine).join("\n")}
+## CAMPANHAS (agrupadas por campanha da IRIS; a mídia atrelada vem indentada)
+${s.campaigns.length === 0 ? "(nenhuma campanha IRIS ativa com mídia vinculada)" : s.campaigns.map(campaignBlock).join("\n\n")}
 
 ## OBSERVAÇÕES DO SISTEMA (dados faltando / a cadastrar)
 ${s.notes.length === 0 ? "(nenhuma)" : s.notes.map((n) => `- ${n}`).join("\n")}
