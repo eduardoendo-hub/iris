@@ -617,3 +617,51 @@ model PushSubscription {
 
   @@index([userId])
 }
+
+
+// ============================================================
+// GESTOR DE TRÁFEGO — campanhas rastreadas + recomendações do agente
+// ============================================================
+
+// Campanhas de mídia paga que o "Gestor de Tráfego IA" acompanha.
+// Substitui a config no código (lib/products.ts metaCampaignFilter/...) por
+// um registro editável via tela ADM (/admin/tracked-campaigns).
+model TrackedCampaign {
+  id          String   @id @default(cuid())
+  platform    String   // "META" | "GOOGLE"
+  accountId   String   // ad account id (Meta) / customer id (Google)
+  externalId  String?  // id da campanha na plataforma (atribuição precisa)
+  nameFilter  String?  // alternativa: substring do nome (compat metaCampaignFilter)
+  productSlug String?  // vincula ao produto IRIS (opcional)
+  label       String   // nome amigável exibido no cockpit
+  objective   String?  // "trafego" | "conversao" | ...
+  targetCpl   Decimal? @db.Decimal(15, 2) // meta de CPL (R$) p/ as regras do agente
+  targetRoas  Decimal? @db.Decimal(8, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([platform, accountId, externalId])
+  @@index([active])
+}
+
+// Recomendações geradas pelo agente (a lista "o que fazer hoje").
+model AgentRecommendation {
+  id             String   @id @default(cuid())
+  date           DateTime // dia da análise (SP midnight)
+  scope          String   // "PORTFOLIO" | "CAMPAIGN" | "KEYWORD"
+  platform       String?  // "META" | "GOOGLE"
+  campaignRef    String?  // externalId/nome da campanha alvo
+  entityRef      String?  // keyword / ad / adset alvo
+  priority       String   // "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+  category       String   // "PAUSE" | "SCALE" | "REALLOCATE" | "BID" | "NEGATIVE" | "CREATIVE" | "ALERT"
+  problem        String   @db.Text // com o número que justifica
+  action         String   @db.Text // a recomendação concreta
+  expectedImpact String?  @db.Text
+  evidence       Json?    // métricas que embasam (spend, cpl, ctr, ...)
+  status         String   @default("OPEN") // "OPEN" | "DONE" | "DISMISSED"
+  createdAt      DateTime @default(now())
+
+  @@index([date, priority])
+  @@index([status])
+}
