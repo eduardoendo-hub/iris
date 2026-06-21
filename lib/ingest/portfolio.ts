@@ -234,6 +234,57 @@ type GaqlRow = {
   metrics?: { cost_micros?: number | string; impressions?: number | string; clicks?: number | string };
 };
 
+const GOOGLE_STATUS: Record<string, string> = { "2": "ENABLED", "3": "PAUSED", "4": "REMOVED" };
+
+/** Lista campanhas da conta Google (pro picker da tela). Não lança. */
+export async function listGoogleCampaigns(): Promise<{
+  accountId: string;
+  campaigns: Array<{ id: string; name: string; status: string }>;
+  error?: string;
+}> {
+  const accountId = (process.env.GOOGLE_ADS_CUSTOMER_ID || "").replace(/-/g, "").trim();
+  const customer = getGoogleCustomer();
+  if (!customer) return { accountId, campaigns: [], error: "missing_google_env" };
+  try {
+    const rows = (await customer.query(
+      `SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status IN ('ENABLED','PAUSED') ORDER BY campaign.name`,
+    )) as Array<{ campaign?: { id?: string | number; name?: string; status?: string | number } }>;
+    const campaigns = rows.map((r) => ({
+      id: r.campaign?.id != null ? String(r.campaign.id) : "",
+      name: r.campaign?.name ?? "",
+      status: GOOGLE_STATUS[String(r.campaign?.status)] ?? String(r.campaign?.status ?? ""),
+    }));
+    return { accountId, campaigns };
+  } catch (err) {
+    return { accountId, campaigns: [], error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Lista campanhas da conta Meta (pro picker da tela). Não lança. */
+export async function listMetaCampaignsForPicker(): Promise<{
+  accountId: string;
+  campaigns: Array<{ id: string; name: string; status: string }>;
+  error?: string;
+}> {
+  const accessToken = process.env.META_ACCESS_TOKEN;
+  const raw = process.env.META_AD_ACCOUNT_ID;
+  const accountId = raw || "";
+  if (!accessToken || !raw) return { accountId, campaigns: [], error: "missing_meta_env" };
+  const adAccountId = raw.startsWith("act_") ? raw : `act_${raw}`;
+  try {
+    const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/campaigns`);
+    url.searchParams.set("fields", "id,name,status,objective");
+    url.searchParams.set("limit", "200");
+    url.searchParams.set("access_token", accessToken);
+    const r = await fetch(url.toString());
+    const json = (await r.json()) as { data?: Array<{ id: string; name: string; status: string }>; error?: { message: string } };
+    if (!r.ok || json.error) return { accountId, campaigns: [], error: json.error?.message || `HTTP ${r.status}` };
+    return { accountId, campaigns: (json.data ?? []).map((c) => ({ id: c.id, name: c.name, status: c.status })) };
+  } catch (err) {
+    return { accountId, campaigns: [], error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function ingestGooglePortfolio(opts: { days?: number }): Promise<PortfolioIngestResult> {
   const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
   const tracked = await loadActiveTracked("GOOGLE");

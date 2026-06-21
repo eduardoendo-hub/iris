@@ -31,13 +31,50 @@ const empty = {
   targetRoas: "",
 };
 
+type PickerCampaign = { id: string; name: string; status: string };
+type PickerSide = { accountId: string; campaigns: PickerCampaign[]; error?: string };
+type PickerData = { meta: PickerSide; google: PickerSide };
+
 export function TrackedCampaignManager({ initial }: { initial: TrackedItem[] }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...empty });
   const [busy, setBusy] = useState(false);
+  const [picker, setPicker] = useState<PickerData | null>(null);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const [pickerErr, setPickerErr] = useState<string | null>(null);
 
   function set<K extends keyof typeof form>(k: K, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function loadCampaigns() {
+    setPickerBusy(true);
+    setPickerErr(null);
+    try {
+      const res = await fetch("/api/admin/ad-campaigns");
+      const data = await res.json();
+      if (!res.ok) {
+        setPickerErr(data.error || res.statusText);
+        return;
+      }
+      setPicker(data as PickerData);
+    } catch (e) {
+      setPickerErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPickerBusy(false);
+    }
+  }
+
+  function usePickedCampaign(platform: "META" | "GOOGLE", accountId: string, c: PickerCampaign) {
+    setForm((f) => ({
+      ...f,
+      platform,
+      accountId,
+      externalId: c.id,
+      nameFilter: "",
+      label: c.name.slice(0, 120),
+    }));
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function add() {
@@ -83,6 +120,36 @@ export function TrackedCampaignManager({ initial }: { initial: TrackedItem[] }) 
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Picker — puxar campanhas da conta */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide opacity-70">
+            Puxar campanhas da conta
+          </h2>
+          <button
+            onClick={loadCampaigns}
+            disabled={pickerBusy}
+            className="rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:opacity-50"
+          >
+            {pickerBusy ? "Buscando…" : picker ? "Atualizar lista" : "Buscar campanhas (Meta + Google)"}
+          </button>
+        </div>
+        {pickerErr && <p className="text-xs text-red-400">Erro: {pickerErr}</p>}
+        {!picker && !pickerErr && (
+          <p className="text-xs opacity-50">
+            Clique pra listar as campanhas das contas conectadas. Depois é só clicar “usar” numa campanha
+            que o formulário abaixo já vem preenchido (plataforma, conta, ID e nome) — você só adiciona o
+            utm_campaign e a meta de CPL.
+          </p>
+        )}
+        {picker && (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PickerColumn title="Meta" platform="META" side={picker.meta} onUse={usePickedCampaign} />
+            <PickerColumn title="Google" platform="GOOGLE" side={picker.google} onUse={usePickedCampaign} />
+          </div>
+        )}
+      </div>
+
       {/* Form */}
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide opacity-70">
@@ -202,6 +269,53 @@ export function TrackedCampaignManager({ initial }: { initial: TrackedItem[] }) 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function PickerColumn({
+  title,
+  platform,
+  side,
+  onUse,
+}: {
+  title: string;
+  platform: "META" | "GOOGLE";
+  side: PickerSide;
+  onUse: (platform: "META" | "GOOGLE", accountId: string, c: PickerCampaign) => void;
+}) {
+  const active = side.campaigns.filter((c) => c.status === "ENABLED" || c.status === "ACTIVE");
+  const others = side.campaigns.filter((c) => !(c.status === "ENABLED" || c.status === "ACTIVE"));
+  const ordered = [...active, ...others];
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold opacity-80">{title}</span>
+        <span className="text-[11px] opacity-40">{side.accountId || "—"}</span>
+      </div>
+      {side.error ? (
+        <p className="text-[11px] text-red-400/80">{side.error === "missing_meta_env" || side.error === "missing_google_env" ? "credenciais não configuradas no env" : side.error}</p>
+      ) : ordered.length === 0 ? (
+        <p className="text-[11px] opacity-40">nenhuma campanha</p>
+      ) : (
+        <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+          {ordered.map((c) => {
+            const isActive = c.status === "ENABLED" || c.status === "ACTIVE";
+            return (
+              <li key={c.id} className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-white/5">
+                <span className={"h-1.5 w-1.5 shrink-0 rounded-full " + (isActive ? "bg-green-400" : "bg-white/25")} title={c.status} />
+                <span className="flex-1 truncate text-xs" title={c.name}>{c.name}</span>
+                <button
+                  onClick={() => onUse(platform, side.accountId, c)}
+                  className="shrink-0 rounded bg-blue-600/80 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-500"
+                >
+                  usar
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
