@@ -37,11 +37,13 @@ export default async function AdminPage() {
   }
 
   // Contadores rapidos pros cards
-  const [campaignsCount, activeCampaigns, allowedEmails, allowedDomains] = await Promise.all([
+  const [campaignsCount, activeCampaigns, allowedEmails, allowedDomains, trackedActive, openRecs] = await Promise.all([
     prisma.campaign.count(),
     prisma.campaign.count({ where: { isActive: true } }),
     prisma.allowedEmail.count(),
     prisma.allowedDomain.count(),
+    prisma.trackedCampaign.count({ where: { active: true } }),
+    prisma.agentRecommendation.count({ where: { status: "OPEN" } }),
   ]);
 
   return (
@@ -107,6 +109,18 @@ export default async function AdminPage() {
             title="Acessos"
             subtitle={`${allowedEmails} email${allowedEmails === 1 ? "" : "s"} · ${allowedDomains} domínio${allowedDomains === 1 ? "" : "s"}`}
             description="Emails individuais e domínios autorizados a logar no IRIS via Google OAuth."
+          />
+          <AdminCard
+            href="/admin/gestor-trafego"
+            title="Gestor de Tráfego"
+            subtitle={`${openRecs} recomendaç${openRecs === 1 ? "ão" : "ões"} aberta${openRecs === 1 ? "" : "s"}`}
+            description="O agente de mídia paga: olha todas as campanhas ativas (Meta + Google) e entrega o que fazer hoje, priorizado e com o número que justifica."
+          />
+          <AdminCard
+            href="/admin/tracked-campaigns"
+            title="Campanhas rastreadas"
+            subtitle={`${trackedActive} ativa${trackedActive === 1 ? "" : "s"}`}
+            description="Registro das campanhas de mídia (Meta + Google) que o Gestor de Tráfego acompanha: ID/filtro, utm_campaign, meta de CPL/ROAS."
           />
         </div>
 

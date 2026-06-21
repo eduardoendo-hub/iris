@@ -632,6 +632,7 @@ model TrackedCampaign {
   accountId   String   // ad account id (Meta) / customer id (Google)
   externalId  String?  // id da campanha na plataforma (atribuição precisa)
   nameFilter  String?  // alternativa: substring do nome (compat metaCampaignFilter)
+  utmCampaign String?  // valor de utm_campaign nos anúncios → liga gasto ↔ leads da LP (CPL real)
   productSlug String?  // vincula ao produto IRIS (opcional)
   label       String   // nome amigável exibido no cockpit
   objective   String?  // "trafego" | "conversao" | ...
@@ -643,6 +644,31 @@ model TrackedCampaign {
 
   @@unique([platform, accountId, externalId])
   @@index([active])
+}
+
+// Métricas de mídia POR CAMPANHA (granular) — alimenta o Gestor de Tráfego.
+// Diferente de MetricSample (agregado por produto): aqui cada linha é uma
+// campanha específica num dia. externalId vem SEMPRE da API (campaign id real),
+// mesmo quando a TrackedCampaign foi cadastrada só por nameFilter.
+model CampaignMetricSample {
+  id           String   @id @default(cuid())
+  platform     String   // "META" | "GOOGLE"
+  accountId    String   // ad account / customer id
+  externalId   String   // id da campanha na plataforma
+  campaignName String? // nome da campanha (snapshot do dia)
+  productSlug  String? // vínculo opcional ao produto IRIS
+  metric       String   // "spend" | "impressions" | "clicks"
+  bucket       String   @default("DAY")
+  startsAt     DateTime // início do bucket (DAY em SP)
+  value        Decimal  @db.Decimal(15, 2)
+  unit         String? // "BRL" | "count"
+  meta         Json? // objective, status, etc.
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([platform, externalId, metric, bucket, startsAt])
+  @@index([platform, startsAt])
+  @@index([externalId, metric, startsAt])
 }
 
 // Recomendações geradas pelo agente (a lista "o que fazer hoje").

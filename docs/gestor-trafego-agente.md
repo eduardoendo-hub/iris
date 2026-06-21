@@ -104,7 +104,37 @@ em português, objetivo, sem encher linguiça. Se um dado faltar, diga o que fal
 - **(Futuro) MCP interativo:** modo "converse com as campanhas" puxando dados ao vivo — NÃO no engine diário.
 
 ## Fases de build
-1. **Modelo + tela de "Campanhas rastreadas"** (registro via UI, sai do código). 🥇
-2. **Tela ADM cross-campanha** (carteira lado a lado) + agente de portfólio (digest priorizado). 🥈
+1. **Modelo + tela de "Campanhas rastreadas"** (registro via UI, sai do código). ✅ FEITO (tabelas criadas em prod, tela `/admin/tracked-campaigns`).
+2. **Tela ADM cross-campanha** (carteira lado a lado) + agente de portfólio (digest priorizado). 🥈 ← PRÓXIMA
 3. **Ingestão nível keyword/anúncio** → dicas cirúrgicas de palavra-chave. 🥉
 4. **(Opcional) MCP interativo.**
+
+---
+
+## ⚠️ DESCOBERTA DE ARQUITETURA (define a Fase 2)
+A ingestão atual (`lib/ingest/meta-ads.ts`, `google-ads.ts`) é **agregada por PRODUTO, não por campanha**:
+filtra por `metaCampaignFilter`/`googleCampaignFilter` (substring no nome, de `lib/products.ts`)
+e **soma todas as campanhas que batem** num único `MetricSample` por (productSlug, source, metric, dia).
+Não grava `campaign_id` no `meta`. A unique key do `MetricSample` (productSlug, source, metric, bucket, startsAt)
+**não tem dimensão de campanha** → não dá pra guardar várias campanhas do mesmo produto sem colidir.
+
+➡️ Para o agente dar ordens **POR campanha** (e depois por keyword), precisa de métrica granular por campanha.
+
+### Caminho A — Granular (recomendado, é a fundação certa)
+- Nova tabela `CampaignMetricSample(platform, accountId, externalId, campaignName, metric, bucket, startsAt, value, unit, meta)` com unique `(platform, externalId, metric, bucket, startsAt)`.
+- Novo `lib/ingest/portfolio.ts`: itera `TrackedCampaign` ativas → Meta `level=campaign` (sem colapsar) / Google GAQL `GROUP BY campaign.id` → grava 1 linha por campanha/dia.
+- LP-side por campanha: `VisitEvent` já tem `utmCampaign`/`utmContent` → leads e visitas por campanha.
+- Habilita Fase 3 (keyword) naturalmente (mesma tabela, scope mais fino).
+
+### Caminho B — Bridge (mais rápido, menos granular)
+- Sem tabela nova: agente roda no nível PRODUTO (`MetricSample` atual) + quebra por campanha **só pelo lado da LP** (`VisitEvent.utmCampaign`).
+- CPL por campanha fica aproximado (spend é do produto inteiro, leads são por utm). Bom pra começar, limitado pra "pausar a campanha X".
+
+## Fase 2 — arquivos a criar (Caminho A)
+- `prisma/schema.prisma` + migração: `CampaignMetricSample` (mesmo processo via SSH+docker exec que usamos na Fase 1).
+- `lib/ingest/portfolio.ts` — ingestão per-campanha a partir do registro `TrackedCampaign`.
+- `lib/agent/collect-portfolio-data.ts` — monta o `PortfolioSnapshot` (carteira: por campanha spend/impr/cliq/CTR/CPC + visitas/leads/CPL vs `targetCpl` + tendência 1d/7d/14d + mediana da carteira).
+- `lib/agent/generate-portfolio-recs.ts` — Claude + `gestor-trafego-playbook.md` → grava `AgentRecommendation` (idempotente por dia).
+- `app/api/cron/gestor-trafego/route.ts` — cron diário (após ingestão), gated por cron secret; + botão "Atualizar análise" on-demand.
+- `app/admin/gestor-trafego/page.tsx` + componentes — feed "o que fazer hoje" + tabela da carteira + botões Feito/Ignorar (PATCH status).
+- Link no cockpit.

@@ -26,6 +26,7 @@ export default async function TrackedCampaignsPage() {
     accountId: i.accountId,
     externalId: i.externalId,
     nameFilter: i.nameFilter,
+    utmCampaign: i.utmCampaign,
     productSlug: i.productSlug,
     label: i.label,
     objective: i.objective,

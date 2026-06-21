@@ -9,6 +9,7 @@ export type TrackedItem = {
   accountId: string;
   externalId: string | null;
   nameFilter: string | null;
+  utmCampaign: string | null;
   productSlug: string | null;
   label: string;
   objective: string | null;
@@ -22,6 +23,7 @@ const empty = {
   accountId: "",
   externalId: "",
   nameFilter: "",
+  utmCampaign: "",
   productSlug: "",
   label: "",
   objective: "trafego",
@@ -113,6 +115,10 @@ export function TrackedCampaignManager({ initial }: { initial: TrackedItem[] }) 
           <label className="text-xs">
             Filtro por nome (alternativa ao ID)
             <input className={inputCls} value={form.nameFilter} onChange={(e) => set("nameFilter", e.target.value)} placeholder="ex: CORPORATIVO" />
+          </label>
+          <label className="text-xs">
+            utm_campaign (liga gasto ↔ leads → CPL real)
+            <input className={inputCls} value={form.utmCampaign} onChange={(e) => set("utmCampaign", e.target.value)} placeholder="ex: corporativo-hub-search" />
           </label>
           <label className="text-xs">
             Produto IRIS (slug)
