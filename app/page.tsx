@@ -707,6 +707,34 @@ export default async function CockpitPage({
   }
 
   // ────────────────────────────────────────────────────────────────
+  // Reconciliação dos KPIs com o granular (VisitEvent)
+  // O card "Visitas LP"/clicks lê o MetricSample, que NÃO incrementa quando a
+  // campanha não está ATIVA (gate de ingestão) — então subconta e fica
+  // CONGELADO, divergindo da tabela por canal (que lê VisitEvent, sempre grava).
+  // Aqui pegamos o MAIOR entre os dois, na mesma janela da tabela, pro card
+  // nunca mostrar MENOS visitas/cliques do que realmente aconteceram.
+  // ────────────────────────────────────────────────────────────────
+  {
+    const real = captacaoRows.reduce(
+      (a, r) => {
+        a.visits += r.visits;
+        a.clickWhats += r.clickWhats;
+        a.clickConsultor += r.clickConsultor;
+        a.clickCompra += r.clickCompra;
+        return a;
+      },
+      { visits: 0, clickWhats: 0, clickConsultor: 0, clickCompra: 0 },
+    );
+    if (real.visits > visitsLP) {
+      visitsLP = real.visits;
+      metricsSourceLabel = "Eventos LP · campanha";
+    }
+    if (real.clickWhats > clicksWhats) clicksWhats = real.clickWhats;
+    if (real.clickConsultor > clicksConsultor) clicksConsultor = real.clickConsultor;
+    if (real.clickCompra > clicksCompra) clicksCompra = real.clickCompra;
+  }
+
+  // ────────────────────────────────────────────────────────────────
   // Análise estratégica diária — últimos 7 insights gerados pelo agente
   // ────────────────────────────────────────────────────────────────
   type DailyInsightRow = {
