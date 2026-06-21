@@ -98,10 +98,16 @@ function median(nums: number[]): number | null {
   return xs.length % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2;
 }
 
-async function leadsByFilter(where: { campaignSlug: string } | { utmCampaign: string }, from: Date) {
+// A LP grava VisitEvent.campaignSlug = utm_campaign (tráfego pago) OU o
+// CAMPAIGN_SLUG padrão (orgânico). Por isso a atribuição é por campaignSlug:
+// no nível da mídia, == o utm_campaign dela; no nível da campanha IRIS, o
+// conjunto { slug da campanha } ∪ { utm_campaign de cada mídia atrelada }.
+async function funnelBySlugs(slugs: string[], from: Date) {
+  const clean = Array.from(new Set(slugs.filter(Boolean)));
+  if (clean.length === 0) return { visits: 0, leads: 0, whats: 0 };
   const ev = await prisma.visitEvent.groupBy({
     by: ["eventName"],
-    where: { ...where, ts: { gte: from } },
+    where: { campaignSlug: { in: clean }, ts: { gte: from } },
     _count: { _all: true },
   });
   let visits = 0,
@@ -169,7 +175,7 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       let childLeads: number | null = null;
       let childCpl: number | null = null;
       if (mc.utmCampaign) {
-        const f = await leadsByFilter({ utmCampaign: mc.utmCampaign }, c7);
+        const f = await funnelBySlugs([mc.utmCampaign], c7);
         childLeads = f.leads;
         childCpl = f.leads > 0 ? spend7d / f.leads : null;
       }
@@ -203,8 +209,10 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       void cToday;
     }
 
-    // Funil no nível da campanha IRIS via campaignSlug (atribuição que a LP já manda).
-    const funnel = await leadsByFilter({ campaignSlug: ic.slug }, c7);
+    // Funil no nível da campanha IRIS: orgânico (slug da campanha) + os
+    // utm_campaign de cada mídia atrelada (que é onde os leads pagos caem).
+    const slugSet = [ic.slug, ...ic.mediaCampaigns.map((m) => m.utmCampaign).filter((x): x is string => !!x)];
+    const funnel = await funnelBySlugs(slugSet, c7);
     const spend7d = children.reduce((a, c) => a + c.spend7d, 0);
     const goalCpl = ic.goalCpl != null ? Number(ic.goalCpl) : null;
     const cpl7d = funnel.leads > 0 ? spend7d / funnel.leads : null;
@@ -212,7 +220,13 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
     const convVisitLead = funnel.visits > 0 ? (funnel.leads / funnel.visits) * 100 : null;
 
     if (funnel.visits === 0 && funnel.leads === 0) {
-      notes.push(`"${ic.name}" → 0 evento na LP por campaignSlug "${ic.slug}" (confira se a LP envia esse campaignSlug).`);
+      const utms = ic.mediaCampaigns.map((m) => m.utmCampaign).filter(Boolean);
+      notes.push(
+        `"${ic.name}" → 0 evento na LP. Procurei por campaignSlug em [${[ic.slug, ...utms].join(", ")}]. ` +
+          (utms.length === 0
+            ? "Preencha o utm_campaign de cada mídia (= o utm_campaign dos anúncios) pra casar os leads pagos."
+            : "Confira se esses utm_campaign batem com os dos anúncios."),
+      );
     }
 
     blocks.push({
