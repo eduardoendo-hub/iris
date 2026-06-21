@@ -236,6 +236,23 @@ type GaqlRow = {
 
 const GOOGLE_STATUS: Record<string, string> = { "2": "ENABLED", "3": "PAUSED", "4": "REMOVED" };
 
+/** Re-tenta erros de rede transitórios (ex: 'Premature close' no refresh do token). */
+async function retryNet<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      const transient = /premature close|econnreset|etimedout|socket hang up|eai_again|fetch failed|network|enotfound|und_err/i.test(msg);
+      if (!transient || i === attempts - 1) throw e;
+      await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 /** Lista campanhas da conta Google (pro picker da tela). Não lança. */
 export async function listGoogleCampaigns(): Promise<{
   accountId: string;
@@ -246,8 +263,10 @@ export async function listGoogleCampaigns(): Promise<{
   const customer = getGoogleCustomer();
   if (!customer) return { accountId, campaigns: [], error: "missing_google_env" };
   try {
-    const rows = (await customer.query(
-      `SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status IN ('ENABLED','PAUSED') ORDER BY campaign.name`,
+    const rows = (await retryNet(() =>
+      customer.query(
+        `SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status IN ('ENABLED','PAUSED') ORDER BY campaign.name`,
+      ),
     )) as Array<{ campaign?: { id?: string | number; name?: string; status?: string | number } }>;
     const campaigns = rows.map((r) => ({
       id: r.campaign?.id != null ? String(r.campaign.id) : "",
@@ -305,7 +324,7 @@ export async function ingestGooglePortfolio(opts: { days?: number }): Promise<Po
   `;
   let rows: GaqlRow[] = [];
   try {
-    rows = (await customer.query(query)) as GaqlRow[];
+    rows = (await retryNet(() => customer.query(query))) as GaqlRow[];
   } catch (err) {
     throw new Error(`Google Ads API (portfolio): ${err instanceof Error ? err.message : String(err)}`);
   }
