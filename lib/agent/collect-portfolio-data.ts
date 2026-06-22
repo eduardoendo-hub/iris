@@ -35,6 +35,7 @@ export type PlatformChild = {
   campaignName: string | null;
   utmCampaign: string | null;
   spend7d: number;
+  spendMTD: number; // gasto do mês (1º até hoje, SP)
   impressions7d: number;
   clicks7d: number;
   ctr7d: number;
@@ -55,13 +56,18 @@ export type IrisCampaignBlock = {
   status: string;
   goalCpl: number | null;
   goalRoas: number | null;
-  spend7d: number; // soma das filhas
+  spend7d: number; // soma das filhas (7 dias)
+  spendMTD: number; // soma das filhas (mês até hoje)
   visits7d: number; // via campaignSlug
   leads7d: number;
   whats7d: number;
   cpl7d: number | null; // spend7d / leads7d
   cplVsGoalPct: number | null;
   convVisitLead: number | null;
+  // mês até hoje (pacing)
+  visitsMTD: number;
+  leadsMTD: number;
+  cplMTD: number | null;
   children: PlatformChild[];
 };
 
@@ -72,7 +78,9 @@ export type PortfolioSnapshot = {
     irisCampaigns: number;
     platformCampaigns: number;
     spend7d: number;
+    spendMTD: number;
     leads7d: number;
+    leadsMTD: number;
     blendedCpl: number | null;
     metaSpend7d: number;
     googleSpend7d: number;
@@ -139,11 +147,20 @@ async function funnelBySlugs(slugs: string[], from: Date) {
   return reduceFunnel(ev);
 }
 
+/** Início do mês corrente em SP (1º dia, midnight SP). */
+function monthStartCutoff(): Date {
+  const ymd = spDate(0); // YYYY-MM-DD em SP
+  return spDayBucketFromYMD(ymd.slice(0, 8) + "01");
+}
+
 export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
   const c7 = cutoff(6);
   const c14 = cutoff(13);
   const cYda = cutoff(1);
   const cToday = cutoff(0);
+  const cMonth = monthStartCutoff();
+  // Janela de busca das amostras: cobre o mais antigo entre 14d e o início do mês.
+  const cFetch = cMonth < c14 ? cMonth : c14;
 
   // Campanhas da IRIS ATIVAS que têm campanhas de mídia vinculadas.
   const irisCampaigns = await prisma.campaign.findMany({
@@ -174,11 +191,12 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       let rows: MetricRow[] = [];
       if (mc.externalId) {
         rows = await prisma.campaignMetricSample.findMany({
-          where: { platform: mc.platform, externalId: mc.externalId, startsAt: { gte: c14 } },
+          where: { platform: mc.platform, externalId: mc.externalId, startsAt: { gte: cFetch } },
           select: { metric: true, value: true, startsAt: true },
         });
       }
       const spend7d = sumMetric(rows, "spend", c7);
+      const spendMTD = sumMetric(rows, "spend", cMonth);
       const impressions7d = sumMetric(rows, "impressions", c7);
       const clicks7d = sumMetric(rows, "clicks", c7);
       const spendPrev7d = sumMetric(rows, "spend", c14, c7);
@@ -212,6 +230,7 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
         campaignName: null,
         utmCampaign: mc.utmCampaign,
         spend7d,
+        spendMTD,
         impressions7d,
         clicks7d,
         ctr7d,
@@ -229,9 +248,12 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
     // Funil no nível da campanha IRIS: atribui por productSlug (todo o tráfego
     // real da LP do produto; 1 campanha ativa por produto garante a unicidade).
     const funnel = await funnelByProduct(ic.productSlug, c7);
+    const funnelMTD = await funnelByProduct(ic.productSlug, cMonth);
     const spend7d = children.reduce((a, c) => a + c.spend7d, 0);
+    const spendMTD = children.reduce((a, c) => a + c.spendMTD, 0);
     const goalCpl = ic.goalCpl != null ? Number(ic.goalCpl) : null;
     const cpl7d = funnel.leads > 0 ? spend7d / funnel.leads : null;
+    const cplMTD = funnelMTD.leads > 0 ? spendMTD / funnelMTD.leads : null;
     const cplVsGoalPct = cpl7d != null && goalCpl != null && goalCpl > 0 ? ((cpl7d - goalCpl) / goalCpl) * 100 : null;
     const convVisitLead = funnel.visits > 0 ? (funnel.leads / funnel.visits) * 100 : null;
 
@@ -248,12 +270,16 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       goalCpl,
       goalRoas: ic.goalRoas != null ? Number(ic.goalRoas) : null,
       spend7d,
+      spendMTD,
       visits7d: funnel.visits,
       leads7d: funnel.leads,
       whats7d: funnel.whats,
       cpl7d,
       cplVsGoalPct,
       convVisitLead,
+      visitsMTD: funnelMTD.visits,
+      leadsMTD: funnelMTD.leads,
+      cplMTD,
       children,
     });
   }
@@ -273,7 +299,9 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
 
   const allChildren = blocks.flatMap((b) => b.children);
   const totalSpend = blocks.reduce((a, b) => a + b.spend7d, 0);
+  const totalSpendMTD = blocks.reduce((a, b) => a + b.spendMTD, 0);
   const totalLeads = blocks.reduce((a, b) => a + b.leads7d, 0);
+  const totalLeadsMTD = blocks.reduce((a, b) => a + b.leadsMTD, 0);
 
   // Contexto de keyword/termo de pesquisa do Google (Fase 3) — só campanhas
   // Google com id. Ao vivo; não bloqueia o snapshot se falhar.
@@ -294,7 +322,9 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       irisCampaigns: blocks.length,
       platformCampaigns: allChildren.length,
       spend7d: totalSpend,
+      spendMTD: totalSpendMTD,
       leads7d: totalLeads,
+      leadsMTD: totalLeadsMTD,
       blendedCpl: totalLeads > 0 ? totalSpend / totalLeads : null,
       metaSpend7d: allChildren.filter((c) => c.platform === "META").reduce((a, c) => a + c.spend7d, 0),
       googleSpend7d: allChildren.filter((c) => c.platform === "GOOGLE").reduce((a, c) => a + c.spend7d, 0),

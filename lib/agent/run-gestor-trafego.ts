@@ -11,7 +11,8 @@ import { collectPortfolioSnapshot } from "@/lib/agent/collect-portfolio-data";
 import { generatePortfolioRecs } from "@/lib/agent/generate-portfolio-recs";
 
 export async function runGestorTrafego(opts: { days?: number; dryRun?: boolean; skipIngest?: boolean } = {}) {
-  const days = opts.days ?? 7;
+  // 31 dias por padrão pra cobrir o mês inteiro (visão MTD de pacing de budget).
+  const days = opts.days ?? 31;
 
   const ingest = opts.skipIngest ? null : await ingestPortfolio({ days });
   const snapshot = await collectPortfolioSnapshot();

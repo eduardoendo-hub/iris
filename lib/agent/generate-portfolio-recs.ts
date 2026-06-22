@@ -159,16 +159,18 @@ function childLine(c: PlatformChild): string {
   const trend = c.spendPrev7d > 0 ? `${c.spendTrendPct >= 0 ? "+" : ""}${c.spendTrendPct.toFixed(0)}% vs 7d ant.` : "novo";
   const leadPart = c.leads7d != null ? ` · leads ${fmtNum(c.leads7d)} · CPL ${c.cpl7d != null ? fmtBRL(c.cpl7d) : "—"}` : "";
   return `    • [${c.platform}] ${c.label}${c.campaignName ? ` (${c.campaignName})` : ""} · ${c.daysWithData}d dado
-        spend7d ${fmtBRL(c.spend7d)} (${trend}) · impr ${fmtNum(c.impressions7d)} · cliq ${fmtNum(c.clicks7d)} · CTR ${c.ctr7d.toFixed(2)}% · CPC ${fmtBRL(c.cpc7d)}${leadPart}`;
+        spend7d ${fmtBRL(c.spend7d)} (${trend}) · spendMês ${fmtBRL(c.spendMTD)} · impr ${fmtNum(c.impressions7d)} · cliq ${fmtNum(c.clicks7d)} · CTR ${c.ctr7d.toFixed(2)}% · CPC ${fmtBRL(c.cpc7d)}${leadPart}`;
 }
 
 function campaignBlock(b: IrisCampaignBlock): string {
   const cpl = b.cpl7d != null ? fmtBRL(b.cpl7d) : b.leads7d === 0 ? "sem leads" : "—";
   const goal = b.goalCpl != null ? `goalCPL ${fmtBRL(b.goalCpl)}` : "sem goalCPL";
   const vsGoal = b.cplVsGoalPct != null ? ` · ${b.cplVsGoalPct >= 0 ? "+" : ""}${b.cplVsGoalPct.toFixed(0)}% vs meta` : "";
+  const cplM = b.cplMTD != null ? fmtBRL(b.cplMTD) : b.leadsMTD === 0 ? "sem leads" : "—";
   return `- CAMPANHA IRIS "${b.name}" [${b.productSlug} · ${b.status}]
-    Total 7d: spend ${fmtBRL(b.spend7d)} · visitas ${fmtNum(b.visits7d)} · leads ${fmtNum(b.leads7d)} · CPL ${cpl} (${goal})${vsGoal} · conv ${b.convVisitLead != null ? b.convVisitLead.toFixed(1) + "%" : "—"}
-    Mídia atrelada:
+    7 DIAS: spend ${fmtBRL(b.spend7d)} · visitas ${fmtNum(b.visits7d)} · leads ${fmtNum(b.leads7d)} · CPL ${cpl} (${goal})${vsGoal} · conv ${b.convVisitLead != null ? b.convVisitLead.toFixed(1) + "%" : "—"}
+    MÊS (até hoje): spend ${fmtBRL(b.spendMTD)} · visitas ${fmtNum(b.visitsMTD)} · leads ${fmtNum(b.leadsMTD)} · CPL ${cplM}
+    Mídia atrelada (spend7d · spendMês):
 ${b.children.map(childLine).join("\n")}`;
 }
 
@@ -220,8 +222,9 @@ function buildUserPrompt(s: PortfolioSnapshot): string {
 
 ## VISÃO GERAL (7 dias)
 Campanhas IRIS ativas: ${t.irisCampaigns} (${t.platformCampaigns} campanhas de mídia)
-Spend total 7d: ${fmtBRL(t.spend7d)} (Meta ${fmtBRL(t.metaSpend7d)} + Google ${fmtBRL(t.googleSpend7d)})
-Leads 7d: ${fmtNum(t.leads7d)} · CPL combinado: ${t.blendedCpl != null ? fmtBRL(t.blendedCpl) : "—"}
+Spend 7d: ${fmtBRL(t.spend7d)} (Meta ${fmtBRL(t.metaSpend7d)} + Google ${fmtBRL(t.googleSpend7d)})
+Spend MÊS (até hoje): ${fmtBRL(t.spendMTD)}
+Leads 7d: ${fmtNum(t.leads7d)} · Leads mês: ${fmtNum(t.leadsMTD)} · CPL combinado 7d: ${t.blendedCpl != null ? fmtBRL(t.blendedCpl) : "—"}
 Medianas: CPL/campanha-IRIS ${m.cplIris7d != null ? fmtBRL(m.cplIris7d) : "—"} · CTR ${m.ctr7d != null ? m.ctr7d.toFixed(2) + "%" : "—"} · CPC ${m.cpc7d != null ? fmtBRL(m.cpc7d) : "—"}
 
 ## CAMPANHAS (agrupadas por campanha da IRIS; a mídia atrelada vem indentada)

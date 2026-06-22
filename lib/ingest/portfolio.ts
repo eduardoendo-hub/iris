@@ -136,7 +136,7 @@ type MetaRow = {
 };
 
 export async function ingestMetaPortfolio(opts: { days?: number }): Promise<PortfolioIngestResult> {
-  const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
+  const days = Math.min(Math.max(opts.days ?? 7, 1), 31);
   const tracked = await loadActiveTracked("META");
   if (tracked.length === 0) {
     return { platform: "META", campaignsMatched: 0, samplesUpserted: 0, skipped: true, skipReason: "no_active_tracked", details: [] };
@@ -267,7 +267,7 @@ export async function listMetaCampaignsForPicker(): Promise<{
 }
 
 export async function ingestGooglePortfolio(opts: { days?: number }): Promise<PortfolioIngestResult> {
-  const days = Math.min(Math.max(opts.days ?? 7, 1), 30);
+  const days = Math.min(Math.max(opts.days ?? 7, 1), 31);
   const tracked = await loadActiveTracked("GOOGLE");
   if (tracked.length === 0) {
     return { platform: "GOOGLE", campaignsMatched: 0, samplesUpserted: 0, skipped: true, skipReason: "no_active_tracked", details: [] };

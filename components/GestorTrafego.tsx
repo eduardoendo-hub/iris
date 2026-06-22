@@ -23,6 +23,7 @@ export type ChildRow = {
   label: string;
   campaignName: string | null;
   spend7d: number;
+  spendMTD: number;
   impressions7d: number;
   clicks7d: number;
   ctr7d: number;
@@ -36,10 +37,14 @@ export type IrisRow = {
   status: string;
   goalCpl: number | null;
   spend7d: number;
+  spendMTD: number;
   visits7d: number;
   leads7d: number;
   cpl7d: number | null;
   cplVsGoalPct: number | null;
+  visitsMTD: number;
+  leadsMTD: number;
+  cplMTD: number | null;
   children: ChildRow[];
 };
 
@@ -99,7 +104,7 @@ export function GestorTrafego({
   recommendations: RecItem[];
   carteira: IrisRow[];
   notes: string[];
-  totals: { irisCampaigns: number; platformCampaigns: number; spend7d: number; leads7d: number; blendedCpl: number | null };
+  totals: { irisCampaigns: number; platformCampaigns: number; spend7d: number; spendMTD: number; leads7d: number; leadsMTD: number; blendedCpl: number | null };
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -182,7 +187,7 @@ export function GestorTrafego({
           <h1 className="text-2xl font-bold">Gestor de Tráfego</h1>
           <p className="text-sm opacity-60">
             {analysisDate ? `Análise de ${analysisDate}` : "Nenhuma análise ainda"} · {totals.irisCampaigns} campanhas IRIS ({totals.platformCampaigns} de mídia) ·
-            spend 7d {fmtBRL(totals.spend7d)} · {fmtNum(totals.leads7d)} leads ·
+            spend 7d {fmtBRL(totals.spend7d)} · <span className="opacity-90">spend mês {fmtBRL(totals.spendMTD)}</span> · {fmtNum(totals.leads7d)} leads (7d) ·
             CPL {totals.blendedCpl != null ? fmtBRL(totals.blendedCpl) : "—"}
           </p>
         </div>
@@ -227,23 +232,28 @@ export function GestorTrafego({
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-white/10 bg-white/[0.03] px-3 py-2">
                   <span className="font-semibold">{ic.name}</span>
                   <span className="text-xs opacity-50">{ic.productSlug} · {ic.status}</span>
-                  <span className="ml-auto text-xs opacity-80">spend {fmtBRL(ic.spend7d)}</span>
-                  <span className="text-xs opacity-80">{fmtNum(ic.visits7d)} visitas</span>
-                  <span className="text-xs opacity-80">{fmtNum(ic.leads7d)} leads</span>
-                  <span className="text-xs">
-                    CPL{" "}
-                    {ic.cpl7d != null ? (
-                      <span className={ic.goalCpl != null && ic.cpl7d > ic.goalCpl ? "text-orange-300" : "text-green-400"}>{fmtBRL(ic.cpl7d)}</span>
-                    ) : (
-                      <span className="opacity-40">{ic.leads7d === 0 ? "0 lead" : "—"}</span>
-                    )}
-                    {ic.goalCpl != null && <span className="opacity-40"> / {fmtBRL(ic.goalCpl)}</span>}
-                    {ic.cplVsGoalPct != null && (
-                      <span className={ic.cplVsGoalPct > 0 ? "text-orange-300" : "text-green-400"}>
-                        {" "}({ic.cplVsGoalPct >= 0 ? "+" : ""}{ic.cplVsGoalPct.toFixed(0)}%)
-                      </span>
-                    )}
-                  </span>
+                  <div className="ml-auto flex flex-col items-end gap-0.5 text-xs">
+                    <div className="opacity-85">
+                      <span className="opacity-50">7d:</span> spend {fmtBRL(ic.spend7d)} · {fmtNum(ic.visits7d)} vis · {fmtNum(ic.leads7d)} leads · CPL{" "}
+                      {ic.cpl7d != null ? (
+                        <span className={ic.goalCpl != null && ic.cpl7d > ic.goalCpl ? "text-orange-300" : "text-green-400"}>{fmtBRL(ic.cpl7d)}</span>
+                      ) : (
+                        <span className="opacity-40">{ic.leads7d === 0 ? "0 lead" : "—"}</span>
+                      )}
+                      {ic.goalCpl != null && <span className="opacity-40"> / {fmtBRL(ic.goalCpl)}</span>}
+                      {ic.cplVsGoalPct != null && (
+                        <span className={ic.cplVsGoalPct > 0 ? "text-orange-300" : "text-green-400"}> ({ic.cplVsGoalPct >= 0 ? "+" : ""}{ic.cplVsGoalPct.toFixed(0)}%)</span>
+                      )}
+                    </div>
+                    <div className="opacity-70">
+                      <span className="opacity-50">mês:</span> spend {fmtBRL(ic.spendMTD)} · {fmtNum(ic.visitsMTD)} vis · {fmtNum(ic.leadsMTD)} leads · CPL{" "}
+                      {ic.cplMTD != null ? (
+                        <span className={ic.goalCpl != null && ic.cplMTD > ic.goalCpl ? "text-orange-300" : "text-green-400"}>{fmtBRL(ic.cplMTD)}</span>
+                      ) : (
+                        <span className="opacity-40">{ic.leadsMTD === 0 ? "0 lead" : "—"}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <table className="w-full text-sm">
                   <thead className="text-left text-xs uppercase opacity-40">
@@ -251,6 +261,7 @@ export function GestorTrafego({
                       <th className="px-3 py-1.5">Mídia</th>
                       <th className="px-3 py-1.5">Plat.</th>
                       <th className="px-3 py-1.5">Spend 7d</th>
+                      <th className="px-3 py-1.5">Spend mês</th>
                       <th className="px-3 py-1.5">Impr</th>
                       <th className="px-3 py-1.5">Cliq</th>
                       <th className="px-3 py-1.5">CTR</th>
@@ -266,6 +277,7 @@ export function GestorTrafego({
                         </td>
                         <td className="px-3 py-1.5 opacity-70">{c.platform === "META" ? "Meta" : "Google"}</td>
                         <td className="px-3 py-1.5">{fmtBRL(c.spend7d)}</td>
+                        <td className="px-3 py-1.5 opacity-70">{fmtBRL(c.spendMTD)}</td>
                         <td className="px-3 py-1.5 opacity-70">{fmtNum(c.impressions7d)}</td>
                         <td className="px-3 py-1.5 opacity-70">{fmtNum(c.clicks7d)}</td>
                         <td className="px-3 py-1.5 opacity-70">{c.ctr7d.toFixed(2)}%</td>
