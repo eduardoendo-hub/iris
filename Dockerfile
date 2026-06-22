@@ -29,4 +29,10 @@ ENV HOSTNAME="0.0.0.0"
 # Migration NAO roda no boot — quebrou container em prod.
 # Aplicar 1x manual via Coolify Terminal: npx prisma migrate deploy
 # (ou seguir os passos em docs/MIGRATION.md)
-CMD ["node", "server.js"]
+#
+# --no-network-family-autoselection: desliga o "Happy Eyeballs" do Node 20+
+# (autoSelectFamily). Em containers com IPv6 quebrado isso causa
+# "Invalid response body ... Premature close" ao falar com hosts dual-stack
+# como oauth2.googleapis.com (Google Ads OAuth). Forca conexao sequencial (IPv4).
+# --dns-result-order=ipv4first reforca priorizando IPv4 na resolucao DNS.
+CMD ["node", "--no-network-family-autoselection", "--dns-result-order=ipv4first", "server.js"]
