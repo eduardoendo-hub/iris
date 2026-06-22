@@ -17,9 +17,9 @@
  * Auth reaproveita os MESMOS envs dos ingests existentes (META_ACCESS_TOKEN,
  * META_AD_ACCOUNT_ID, GOOGLE_ADS_*). Assume 1 conta Meta + 1 customer Google.
  */
-import { GoogleAdsApi, type Customer } from "google-ads-api";
 import { prisma } from "@/lib/prisma";
 import { spDayBucketFromYMD } from "@/lib/time-buckets";
+import { googleAdsSearch, googleConfigured } from "./google-rest";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -213,45 +213,10 @@ export async function ingestMetaPortfolio(opts: { days?: number }): Promise<Port
   return { platform: "META", campaignsMatched: matchedSet.size, samplesUpserted: upserted, details };
 }
 
-// ────────────────────────── GOOGLE ──────────────────────────
-
-let _client: GoogleAdsApi | null = null;
-function getGoogleCustomer(): Customer | null {
-  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-  const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
-  const customerId = (process.env.GOOGLE_ADS_CUSTOMER_ID || "").replace(/-/g, "").trim();
-  const loginCustomerId = (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || "").replace(/-/g, "").trim() || undefined;
-  if (!developerToken || !clientId || !clientSecret || !refreshToken || !customerId) return null;
-  if (!_client) _client = new GoogleAdsApi({ developer_token: developerToken, client_id: clientId, client_secret: clientSecret });
-  return _client.Customer({ customer_id: customerId, refresh_token: refreshToken, ...(loginCustomerId ? { login_customer_id: loginCustomerId } : {}) });
-}
-
-type GaqlRow = {
-  segments?: { date?: string };
-  campaign?: { id?: string | number; name?: string };
-  metrics?: { cost_micros?: number | string; impressions?: number | string; clicks?: number | string };
-};
-
-const GOOGLE_STATUS: Record<string, string> = { "2": "ENABLED", "3": "PAUSED", "4": "REMOVED" };
-
-/** Re-tenta erros de rede transitórios (ex: 'Premature close' no refresh do token). */
-async function retryNet<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): Promise<T> {
-  let lastErr: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      const msg = e instanceof Error ? e.message : String(e);
-      const transient = /premature close|econnreset|etimedout|socket hang up|eai_again|fetch failed|network|enotfound|und_err/i.test(msg);
-      if (!transient || i === attempts - 1) throw e;
-      await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
-    }
-  }
-  throw lastErr;
-}
+// ────────────────────────── GOOGLE (REST nativo) ──────────────────────────
+// Usa lib/ingest/google-rest.ts (fetch nativo + searchStream) — a lib
+// google-ads-api falha com 'Premature close' no container. Campos da resposta
+// REST são camelCase (costMicros) e status vem por nome ("ENABLED"/"PAUSED").
 
 /** Lista campanhas da conta Google (pro picker da tela). Não lança. */
 export async function listGoogleCampaigns(): Promise<{
@@ -260,18 +225,15 @@ export async function listGoogleCampaigns(): Promise<{
   error?: string;
 }> {
   const accountId = (process.env.GOOGLE_ADS_CUSTOMER_ID || "").replace(/-/g, "").trim();
-  const customer = getGoogleCustomer();
-  if (!customer) return { accountId, campaigns: [], error: "missing_google_env" };
+  if (!googleConfigured()) return { accountId, campaigns: [], error: "missing_google_env" };
   try {
-    const rows = (await retryNet(() =>
-      customer.query(
-        `SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status IN ('ENABLED','PAUSED') ORDER BY campaign.name`,
-      ),
-    )) as Array<{ campaign?: { id?: string | number; name?: string; status?: string | number } }>;
+    const rows = await googleAdsSearch(
+      `SELECT campaign.id, campaign.name, campaign.status FROM campaign WHERE campaign.status IN ('ENABLED','PAUSED') ORDER BY campaign.name`,
+    );
     const campaigns = rows.map((r) => ({
-      id: r.campaign?.id != null ? String(r.campaign.id) : "",
+      id: r.campaign?.id ?? "",
       name: r.campaign?.name ?? "",
-      status: GOOGLE_STATUS[String(r.campaign?.status)] ?? String(r.campaign?.status ?? ""),
+      status: r.campaign?.status ?? "",
     }));
     return { accountId, campaigns };
   } catch (err) {
@@ -310,8 +272,7 @@ export async function ingestGooglePortfolio(opts: { days?: number }): Promise<Po
   if (tracked.length === 0) {
     return { platform: "GOOGLE", campaignsMatched: 0, samplesUpserted: 0, skipped: true, skipReason: "no_active_tracked", details: [] };
   }
-  const customer = getGoogleCustomer();
-  if (!customer) {
+  if (!googleConfigured()) {
     return { platform: "GOOGLE", campaignsMatched: 0, samplesUpserted: 0, skipped: true, skipReason: "missing_google_env", details: [] };
   }
   const accountId = (process.env.GOOGLE_ADS_CUSTOMER_ID || "").replace(/-/g, "").trim();
@@ -322,9 +283,9 @@ export async function ingestGooglePortfolio(opts: { days?: number }): Promise<Po
     WHERE segments.date BETWEEN '${spDate(days - 1)}' AND '${spDate(0)}'
     ORDER BY segments.date DESC
   `;
-  let rows: GaqlRow[] = [];
+  let rows;
   try {
-    rows = (await retryNet(() => customer.query(query))) as GaqlRow[];
+    rows = await googleAdsSearch(query);
   } catch (err) {
     throw new Error(`Google Ads API (portfolio): ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -336,7 +297,7 @@ export async function ingestGooglePortfolio(opts: { days?: number }): Promise<Po
   let upserted = 0;
 
   for (const row of rows) {
-    const cid = row.campaign?.id != null ? String(row.campaign.id) : undefined;
+    const cid = row.campaign?.id ?? undefined;
     const cname = row.campaign?.name ?? "";
     const date = row.segments?.date;
     if (!cid || !date) continue;
@@ -353,7 +314,7 @@ export async function ingestGooglePortfolio(opts: { days?: number }): Promise<Po
 
     const startsAt = spDayBucketFromYMD(date);
     const metrics: Array<{ metric: "spend" | "impressions" | "clicks"; value: number; unit: "BRL" | "count" }> = [
-      { metric: "spend", value: Number(row.metrics?.cost_micros ?? 0) / 1_000_000, unit: "BRL" },
+      { metric: "spend", value: Number(row.metrics?.costMicros ?? 0) / 1_000_000, unit: "BRL" },
       { metric: "impressions", value: Number(row.metrics?.impressions ?? 0), unit: "count" },
       { metric: "clicks", value: Number(row.metrics?.clicks ?? 0), unit: "count" },
     ];
