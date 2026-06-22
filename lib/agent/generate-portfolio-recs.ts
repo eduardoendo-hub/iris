@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import type { PortfolioSnapshot, IrisCampaignBlock, PlatformChild } from "./collect-portfolio-data";
+import type { GoogleKwContext } from "./collect-google-keywords";
 
 const MODEL = "claude-opus-4-7"; // mesmo do analista diário (já validado em prod)
 
@@ -44,6 +45,13 @@ PRINCÍPIOS (detalhe no knowledge base abaixo):
 - Uma variável por vez. No Meta, subir budget >20% reseta a fase de aprendizado — escale 10–20%.
 - Sangria de budget (gasto sem retorno) é prioridade #1: PAUSE + realocar.
 - Quando faltar dado (ex: campanha sem utm_campaign, sem CPL), DIGA o que falta em vez de inventar.
+
+KEYWORDS/NEGATIVAS (Google) — seção "GOOGLE — TERMOS DE PESQUISA E NEGATIVAS":
+- Você RECEBE os termos de pesquisa que mais gastaram (7d) E a lista de negativas JÁ cadastradas (na campanha + listas compartilhadas). USE-AS.
+- Ao recomendar negativar (category NEGATIVE), liste APENAS termos que ainda NÃO estão nas negativas — nunca repita o que já existe. Se um termo desperdiçador já está negativado, não o sugira; investigue por que ainda aparece (ex: variação/concordância).
+- Cite os termos reais e o gasto deles. Ex: termo "curso grátis" gastou R$ 60, 0 conv → negativar (não está na lista).
+- Se NÃO há negativas cadastradas, diga isso e proponha uma lista inicial baseada nos termos ruins reais que você viu.
+- Identifique keywords/termos com gasto alto e 0 conversão pra pausar/negativar.
 
 CATEGORIAS válidas: PAUSE, SCALE, REALLOCATE, BID, NEGATIVE, CREATIVE, TRACKING, ALERT.
 PRIORIDADES válidas: CRITICAL, HIGH, MEDIUM, LOW.
@@ -138,6 +146,24 @@ function campaignBlock(b: IrisCampaignBlock): string {
 ${b.children.map(childLine).join("\n")}`;
 }
 
+function googleKwBlock(k: GoogleKwContext): string {
+  if (k.error) return `- ${k.label}: erro ao puxar keywords (${k.error})`;
+  const terms = k.searchTerms.length === 0
+    ? "    (sem termos no período)"
+    : k.searchTerms
+        .slice(0, 25)
+        .map((t) => `    "${t.term}" — gasto ${fmtBRL(t.cost)}, ${fmtNum(t.clicks)} cliq, ${t.conversions.toFixed(1)} conv`)
+        .join("\n");
+  const negs = k.negatives.length === 0
+    ? "    (NENHUMA negativa cadastrada)"
+    : k.negatives.slice(0, 80).map((n) => `    "${n.text}" [${n.matchType}] (${n.source})`).join("\n");
+  return `- ${k.label}
+  TERMOS DE PESQUISA (top por gasto, 7d):
+${terms}
+  NEGATIVAS JÁ CADASTRADAS (${k.negatives.length}):
+${negs}`;
+}
+
 function buildUserPrompt(s: PortfolioSnapshot): string {
   const t = s.totals;
   const m = s.medians;
@@ -151,6 +177,9 @@ Medianas: CPL/campanha-IRIS ${m.cplIris7d != null ? fmtBRL(m.cplIris7d) : "—"}
 
 ## CAMPANHAS (agrupadas por campanha da IRIS; a mídia atrelada vem indentada)
 ${s.campaigns.length === 0 ? "(nenhuma campanha IRIS ativa com mídia vinculada)" : s.campaigns.map(campaignBlock).join("\n\n")}
+
+## GOOGLE — TERMOS DE PESQUISA E NEGATIVAS JÁ CADASTRADAS
+${(s.googleKeywords ?? []).length === 0 ? "(sem dados de keyword do Google)" : s.googleKeywords.map(googleKwBlock).join("\n\n")}
 
 ## OBSERVAÇÕES DO SISTEMA (dados faltando / a cadastrar)
 ${s.notes.length === 0 ? "(nenhuma)" : s.notes.map((n) => `- ${n}`).join("\n")}

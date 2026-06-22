@@ -12,6 +12,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { spDayBucketFromYMD } from "@/lib/time-buckets";
+import { collectGoogleKeywordContext, type GoogleKwContext } from "./collect-google-keywords";
 
 function spDate(offsetDays: number): string {
   const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
@@ -82,6 +83,7 @@ export type PortfolioSnapshot = {
     cpc7d: number | null;
   };
   campaigns: IrisCampaignBlock[];
+  googleKeywords: GoogleKwContext[];
   notes: string[];
 };
 
@@ -273,6 +275,18 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
   const totalSpend = blocks.reduce((a, b) => a + b.spend7d, 0);
   const totalLeads = blocks.reduce((a, b) => a + b.leads7d, 0);
 
+  // Contexto de keyword/termo de pesquisa do Google (Fase 3) — só campanhas
+  // Google com id. Ao vivo; não bloqueia o snapshot se falhar.
+  const googleCampaigns = allChildren
+    .filter((c) => c.platform === "GOOGLE" && c.externalId)
+    .map((c) => ({ externalId: c.externalId as string, label: c.label }));
+  let googleKeywords: GoogleKwContext[] = [];
+  try {
+    googleKeywords = await collectGoogleKeywordContext(googleCampaigns, 7);
+  } catch {
+    googleKeywords = [];
+  }
+
   return {
     analysisDate: spDate(0),
     generatedAt: new Date().toISOString(),
@@ -291,6 +305,7 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       cpc7d: median(allChildren.filter((c) => c.clicks7d > 0).map((c) => c.cpc7d)),
     },
     campaigns: blocks,
+    googleKeywords,
     notes: Array.from(new Set(notes)),
   };
 }
