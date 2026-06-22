@@ -78,6 +78,13 @@ const SYSTEM_TAIL = `\n\n---\n\nOUTPUT: JSON estruturado conforme schema. Gere d
 - expectedImpact: efeito esperado quantificado (texto puro), ou "" (string vazia). Ex: "Recupera ~R$ 90/semana de budget e deve gerar +3 leads/semana no mesmo gasto."
 - evidence: TEXTO curto com os números-chave que embasam (ou "" se não houver). Ex: "spend7d R$ 92, leads 0, mediana CPL R$ 28".
 
+AÇÃO EXECUTÁVEL (1-clique) — só pra Google, quando a recomendação for automatizável:
+- applyType: "ADD_NEGATIVES" (adicionar negativas na campanha) | "LINK_LIST" (vincular a campanha a uma lista compartilhada de negativas) | "NONE" (não automatizável / outra plataforma).
+- applyCampaignId: o ID NUMÉRICO da campanha Google alvo (o "id N" que aparece na seção GOOGLE — TERMOS, ou no "id" da mídia). "" se applyType=NONE.
+- applyNegatives: para ADD_NEGATIVES, a lista de negativas a criar, cada uma { text, matchType }. Use EXACT pra termos específicos ("crm para advogados"), PHRASE/BROAD pra raízes ("grátis"). [] se não aplicável.
+- applyListName: para LINK_LIST, o NOME EXATO da lista compartilhada a vincular (igual ao que aparece em "lista: X" nas negativas). "" se não aplicável.
+- REGRAS: só preencha applyType != NONE quando tiver CERTEZA do campaignId e dos termos. Negativa que você sugere NÃO pode já existir na lista da campanha. Para Meta, sempre NONE (sem auto-apply ainda). Preencha SEMPRE os 4 campos (use "" / [] quando não aplicável).
+
 REGRAS:
 - Se a carteira está saudável e não há movimento que valha a pena, gere 1 recomendação de "manter e observar X por mais 24h".
 - Nunca gere ação "pra encher". Padding é pior que silêncio.
@@ -95,6 +102,10 @@ type RecOutput = {
     action: string;
     expectedImpact: string;
     evidence: string;
+    applyType: string;
+    applyCampaignId: string;
+    applyNegatives: Array<{ text: string; matchType: string }>;
+    applyListName: string;
   }>;
 };
 
@@ -116,8 +127,23 @@ const OUTPUT_SCHEMA = {
           action: { type: "string" },
           expectedImpact: { type: "string" },
           evidence: { type: "string" },
+          applyType: { type: "string", enum: ["NONE", "ADD_NEGATIVES", "LINK_LIST"] },
+          applyCampaignId: { type: "string" },
+          applyNegatives: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+                matchType: { type: "string", enum: ["EXACT", "PHRASE", "BROAD"] },
+              },
+              required: ["text", "matchType"],
+              additionalProperties: false,
+            },
+          },
+          applyListName: { type: "string" },
         },
-        required: ["scope", "platform", "campaignRef", "entityRef", "priority", "category", "problem", "action", "expectedImpact", "evidence"],
+        required: ["scope", "platform", "campaignRef", "entityRef", "priority", "category", "problem", "action", "expectedImpact", "evidence", "applyType", "applyCampaignId", "applyNegatives", "applyListName"],
         additionalProperties: false,
       },
     },
@@ -157,11 +183,34 @@ function googleKwBlock(k: GoogleKwContext): string {
   const negs = k.negatives.length === 0
     ? "    (NENHUMA negativa cadastrada)"
     : k.negatives.slice(0, 80).map((n) => `    "${n.text}" [${n.matchType}] (${n.source})`).join("\n");
-  return `- ${k.label}
+  return `- ${k.label} (id ${k.campaignId})
   TERMOS DE PESQUISA (top por gasto, 7d):
 ${terms}
   NEGATIVAS JÁ CADASTRADAS (${k.negatives.length}):
 ${negs}`;
+}
+
+// Monta o JSON de evidence persistido: nota (texto) + apply (ação executável,
+// só quando o agente marcou applyType != NONE e os params batem).
+type EvidenceJson = {
+  nota?: string;
+  apply?: {
+    type: "ADD_NEGATIVES" | "LINK_LIST";
+    platform: "GOOGLE";
+    campaignId: string;
+    negatives?: Array<{ text: string; matchType: string }>;
+    listName?: string;
+  };
+};
+function buildEvidence(r: RecOutput["recommendations"][number]): EvidenceJson | undefined {
+  const ev: EvidenceJson = {};
+  if (r.evidence) ev.nota = r.evidence;
+  if (r.applyType === "ADD_NEGATIVES" && r.applyCampaignId && r.applyNegatives.length > 0) {
+    ev.apply = { type: "ADD_NEGATIVES", platform: "GOOGLE", campaignId: r.applyCampaignId, negatives: r.applyNegatives };
+  } else if (r.applyType === "LINK_LIST" && r.applyCampaignId && r.applyListName) {
+    ev.apply = { type: "LINK_LIST", platform: "GOOGLE", campaignId: r.applyCampaignId, listName: r.applyListName };
+  }
+  return Object.keys(ev).length > 0 ? ev : undefined;
 }
 
 function buildUserPrompt(s: PortfolioSnapshot): string {
@@ -263,7 +312,7 @@ export async function generatePortfolioRecs(opts: {
           problem: r.problem,
           action: r.action,
           expectedImpact: r.expectedImpact || null,
-          evidence: r.evidence ? { nota: r.evidence } : undefined,
+          evidence: buildEvidence(r),
           status: "OPEN",
         })),
       });

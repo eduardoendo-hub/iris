@@ -96,6 +96,70 @@ export async function googleAdsSearch(query: string): Promise<GoogleAdsRow[]> {
   });
 }
 
+function customerId(): string {
+  return (process.env.GOOGLE_ADS_CUSTOMER_ID || "").replace(/-/g, "").trim();
+}
+
+/** POST genérico pra um serviço :mutate da Google Ads API. */
+async function googleAdsMutate(service: string, operations: unknown[]): Promise<unknown> {
+  const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  const cid = customerId();
+  const loginCustomerId = (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || "").replace(/-/g, "").trim();
+  if (!devToken) throw new Error("missing GOOGLE_ADS_DEVELOPER_TOKEN");
+  if (!cid) throw new Error("missing GOOGLE_ADS_CUSTOMER_ID");
+  const token = await getGoogleAccessToken();
+  const url = `https://googleads.googleapis.com/${API_VERSION}/customers/${cid}/${service}:mutate`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "developer-token": devToken,
+    "Content-Type": "application/json",
+  };
+  if (loginCustomerId) headers["login-customer-id"] = loginCustomerId;
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ operations }) });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`google_ads_mutate ${service} ${res.status}: ${text.slice(0, 500)}`);
+  return JSON.parse(text);
+}
+
+/** Adiciona negativas no NÍVEL da campanha. matchType: EXACT|PHRASE|BROAD. */
+export async function addCampaignNegativeKeywords(
+  campaignId: string,
+  negatives: Array<{ text: string; matchType: string }>,
+): Promise<{ added: number }> {
+  const cid = customerId();
+  const ops = negatives.map((n) => ({
+    create: {
+      campaign: `customers/${cid}/campaigns/${campaignId}`,
+      negative: true,
+      keyword: { text: n.text, matchType: (n.matchType || "EXACT").toUpperCase() },
+    },
+  }));
+  await googleAdsMutate("campaignCriteria", ops);
+  return { added: ops.length };
+}
+
+/** Acha uma lista compartilhada de negativas pelo nome (exato). */
+export async function findSharedSetByName(name: string): Promise<{ resourceName: string; id: string } | null> {
+  const safe = name.replace(/'/g, "\\'");
+  const rows = (await googleAdsSearch(
+    `SELECT shared_set.id, shared_set.name, shared_set.resource_name FROM shared_set WHERE shared_set.type = 'NEGATIVE_KEYWORDS' AND shared_set.name = '${safe}'`,
+  )) as unknown as Array<{ sharedSet?: { id?: string; resourceName?: string } }>;
+  const r = rows[0];
+  if (!r?.sharedSet?.resourceName) return null;
+  return { resourceName: r.sharedSet.resourceName, id: String(r.sharedSet.id ?? "") };
+}
+
+/** Vincula a campanha a uma lista compartilhada de negativas (pelo nome). */
+export async function linkCampaignToSharedSetByName(campaignId: string, sharedSetName: string): Promise<{ linked: string }> {
+  const set = await findSharedSetByName(sharedSetName);
+  if (!set) throw new Error(`lista compartilhada "${sharedSetName}" não encontrada`);
+  const cid = customerId();
+  await googleAdsMutate("campaignSharedSets", [
+    { create: { campaign: `customers/${cid}/campaigns/${campaignId}`, sharedSet: set.resourceName } },
+  ]);
+  return { linked: set.resourceName };
+}
+
 /** Disponível se as credenciais mínimas estão configuradas. */
 export function googleConfigured(): boolean {
   return !!(

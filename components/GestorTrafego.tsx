@@ -55,6 +55,26 @@ const PRIO_STYLE: Record<string, string> = {
 };
 const PRIO_LABEL: Record<string, string> = { CRITICAL: "Crítico", HIGH: "Alto", MEDIUM: "Médio", LOW: "Baixo" };
 
+type ApplySpec =
+  | { type: "ADD_NEGATIVES"; campaignId: string; negatives: Array<{ text: string; matchType: string }> }
+  | { type: "LINK_LIST"; campaignId: string; listName: string };
+
+/** Extrai a ação executável da recomendação (evidence.apply), se houver. */
+function applySpec(r: RecItem): ApplySpec | null {
+  const ap = (r.evidence as { apply?: ApplySpec } | null)?.apply;
+  return ap && (ap.type === "ADD_NEGATIVES" || ap.type === "LINK_LIST") ? ap : null;
+}
+
+function applyLabel(r: RecItem): string {
+  const ap = applySpec(r);
+  if (!ap) return "Aplicar";
+  if (ap.type === "ADD_NEGATIVES") {
+    const terms = ap.negatives.map((n) => `"${n.text}" [${n.matchType}]`).join(", ");
+    return `Negativar ${ap.negatives.length} termo(s): ${terms}`;
+  }
+  return `Vincular lista "${ap.listName}"`;
+}
+
 /** Uma recomendação pertence à campanha IRIS selecionada? (PORTFOLIO sempre; senão casa por nome). */
 function recMatchesCampaign(r: RecItem, ic: IrisRow): boolean {
   if (r.scope === "PORTFOLIO") return true;
@@ -85,6 +105,7 @@ export function GestorTrafego({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("all");
+  const [applying, setApplying] = useState<string | null>(null);
 
   async function runNow() {
     setBusy(true);
@@ -121,6 +142,28 @@ export function GestorTrafego({
       body: JSON.stringify({ status }),
     });
     router.refresh();
+  }
+
+  async function applyRec(r: RecItem) {
+    const ap = applySpec(r);
+    if (!ap) return;
+    if (!confirm(`Aplicar no Google Ads agora?\n\n${applyLabel(r)}\n\nIsso escreve na conta real (reversível).`)) return;
+    setApplying(r.id);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/recommendations/${r.id}/apply`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        setMsg("Erro ao aplicar: " + (data.message || data.error || res.statusText));
+        return;
+      }
+      setMsg(`✓ Aplicado: ${applyLabel(r)}`);
+      router.refresh();
+    } catch (e) {
+      setMsg("Erro ao aplicar: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setApplying(null);
+    }
   }
 
   const selectedIc = selected === "all" ? null : carteira.find((c) => c.name === selected) ?? null;
@@ -261,16 +304,24 @@ export function GestorTrafego({
                 <p className="mb-1 text-sm opacity-80">{r.problem}</p>
                 <p className="text-sm font-medium">→ {r.action}</p>
                 {r.expectedImpact && <p className="mt-1 text-xs text-green-400/90">Impacto: {r.expectedImpact}</p>}
-                {r.evidence && Object.keys(r.evidence).length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {Object.entries(r.evidence).map(([k, v]) => (
-                      <span key={k} className="rounded bg-black/30 px-1.5 py-0.5 text-[11px] opacity-60">
-                        {k}: {String(v)}
-                      </span>
-                    ))}
+                {typeof (r.evidence as { nota?: string } | null)?.nota === "string" && (
+                  <div className="mt-2">
+                    <span className="rounded bg-black/30 px-1.5 py-0.5 text-[11px] opacity-60">
+                      {(r.evidence as { nota?: string }).nota}
+                    </span>
                   </div>
                 )}
-                <div className="mt-3 flex gap-3">
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {applySpec(r) && (
+                    <button
+                      onClick={() => applyRec(r)}
+                      disabled={applying === r.id}
+                      className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                      title={applyLabel(r)}
+                    >
+                      {applying === r.id ? "Aplicando…" : "⚡ Aplicar"}
+                    </button>
+                  )}
                   <button onClick={() => setStatus(r.id, "DONE")} className="text-xs font-semibold text-green-400 hover:underline">
                     ✓ feito
                   </button>
