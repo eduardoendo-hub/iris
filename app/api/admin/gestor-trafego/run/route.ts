@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dry_run") === "true";
-  const days = Number(url.searchParams.get("days") || "7") || 7;
+  const days = Number(url.searchParams.get("days") || "31") || 31;
   try {
     const result = await runGestorTrafego({ days, dryRun });
     return NextResponse.json(result);
