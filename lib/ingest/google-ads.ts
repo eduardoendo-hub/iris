@@ -18,11 +18,11 @@
  *   GOOGLE_ADS_CUSTOMER_ID         - ID da conta Google Ads (formato "1234567890", sem hifens)
  *   GOOGLE_ADS_LOGIN_CUSTOMER_ID   - (opcional) MCC ID se usar manager account
  */
-import { GoogleAdsApi, type Customer } from "google-ads-api";
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
 import { spDayBucketFromYMD } from "@/lib/time-buckets";
 import { getIngestGate, isYMDInWindow } from "@/lib/campaigns";
+import { googleAdsSearch } from "./google-rest";
 
 function loadConfig(productSlug: string) {
   const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
@@ -58,22 +58,8 @@ function loadConfig(productSlug: string) {
   };
 }
 
-let _client: GoogleAdsApi | null = null;
-function getClient(developerToken: string, clientId: string, clientSecret: string): GoogleAdsApi {
-  if (_client) return _client;
-  _client = new GoogleAdsApi({ developer_token: developerToken, client_id: clientId, client_secret: clientSecret });
-  return _client;
-}
-
-function getCustomer(productSlug: string): Customer {
-  const cfg = loadConfig(productSlug);
-  const client = getClient(cfg.developerToken, cfg.clientId, cfg.clientSecret);
-  return client.Customer({
-    customer_id: cfg.customerId,
-    refresh_token: cfg.refreshToken,
-    ...(cfg.loginCustomerId ? { login_customer_id: cfg.loginCustomerId } : {}),
-  });
-}
+// Ingest agora usa o cliente NATIVO (lib/ingest/google-rest.ts, fetch + REST):
+// a lib google-ads-api falha com 'Premature close' no container Coolify.
 
 // Bucket DAY em SP (= UTC-3). Antes: midnight UTC quebrava view analitica.
 
@@ -89,7 +75,7 @@ export type GoogleAdsIngestResult = {
 type GaqlRow = {
   segments?: { date?: string };
   campaign?: { name?: string };
-  metrics?: { cost_micros?: number | string; impressions?: number | string; clicks?: number | string };
+  metrics?: { costMicros?: number | string; impressions?: number | string; clicks?: number | string };
 };
 
 /**
@@ -138,8 +124,6 @@ export async function ingestGoogleAds(opts: {
   // Date range explicito BETWEEN (UNLIKE Meta, LAST_N_DAYS no GAQL NAO
   // inclui hoje — bug pegado em smoke test). Calcula start/end em SP
   // timezone pra alinhar com o resto do cockpit.
-  const customer = getCustomer(productSlug);
-
   const spDate = (offsetDays: number): string => {
     const d = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000);
     return new Intl.DateTimeFormat("en-CA", {
@@ -172,7 +156,7 @@ export async function ingestGoogleAds(opts: {
 
   let rows: GaqlRow[] = [];
   try {
-    rows = (await customer.query(query)) as GaqlRow[];
+    rows = (await googleAdsSearch(query)) as unknown as GaqlRow[];
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Google Ads API: ${msg}`);
@@ -183,7 +167,7 @@ export async function ingestGoogleAds(opts: {
   for (const r of rows) {
     const date = r.segments?.date;
     if (!date) continue;
-    const spend = Number(r.metrics?.cost_micros ?? 0) / 1_000_000;
+    const spend = Number(r.metrics?.costMicros ?? 0) / 1_000_000;
     const impressions = Number(r.metrics?.impressions ?? 0);
     const clicks = Number(r.metrics?.clicks ?? 0);
     const cur = byDay.get(date) ?? { spend: 0, impressions: 0, clicks: 0 };
