@@ -98,18 +98,7 @@ function median(nums: number[]): number | null {
   return xs.length % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2;
 }
 
-// A LP grava VisitEvent.campaignSlug = utm_campaign (tráfego pago) OU o
-// CAMPAIGN_SLUG padrão (orgânico). Por isso a atribuição é por campaignSlug:
-// no nível da mídia, == o utm_campaign dela; no nível da campanha IRIS, o
-// conjunto { slug da campanha } ∪ { utm_campaign de cada mídia atrelada }.
-async function funnelBySlugs(slugs: string[], from: Date) {
-  const clean = Array.from(new Set(slugs.filter(Boolean)));
-  if (clean.length === 0) return { visits: 0, leads: 0, whats: 0 };
-  const ev = await prisma.visitEvent.groupBy({
-    by: ["eventName"],
-    where: { campaignSlug: { in: clean }, ts: { gte: from } },
-    _count: { _all: true },
-  });
+function reduceFunnel(ev: Array<{ eventName: string; _count: { _all: number } }>) {
   let visits = 0,
     leads = 0,
     whats = 0;
@@ -120,6 +109,32 @@ async function funnelBySlugs(slugs: string[], from: Date) {
     else if (row.eventName === "click_whats") whats += n;
   }
   return { visits, leads, whats };
+}
+
+// Nível da CAMPANHA IRIS: atribui por productSlug. A LP sempre marca
+// product_slug='corporativo' (o IRIS só permite 1 campanha ATIVA por produto),
+// então isso pega TODO o tráfego real da LP — independente do slug da turma ou
+// dos utm_campaign. É o que a página de fato registra.
+async function funnelByProduct(productSlug: string, from: Date) {
+  const ev = await prisma.visitEvent.groupBy({
+    by: ["eventName"],
+    where: { productSlug, ts: { gte: from } },
+    _count: { _all: true },
+  });
+  return reduceFunnel(ev);
+}
+
+// Nível da MÍDIA: a LP grava campaignSlug = utm_campaign (tráfego pago), então
+// os leads de uma campanha de mídia casam pelo utm_campaign dela.
+async function funnelBySlugs(slugs: string[], from: Date) {
+  const clean = Array.from(new Set(slugs.filter(Boolean)));
+  if (clean.length === 0) return { visits: 0, leads: 0, whats: 0 };
+  const ev = await prisma.visitEvent.groupBy({
+    by: ["eventName"],
+    where: { campaignSlug: { in: clean }, ts: { gte: from } },
+    _count: { _all: true },
+  });
+  return reduceFunnel(ev);
 }
 
 export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
@@ -209,10 +224,9 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       void cToday;
     }
 
-    // Funil no nível da campanha IRIS: orgânico (slug da campanha) + os
-    // utm_campaign de cada mídia atrelada (que é onde os leads pagos caem).
-    const slugSet = [ic.slug, ...ic.mediaCampaigns.map((m) => m.utmCampaign).filter((x): x is string => !!x)];
-    const funnel = await funnelBySlugs(slugSet, c7);
+    // Funil no nível da campanha IRIS: atribui por productSlug (todo o tráfego
+    // real da LP do produto; 1 campanha ativa por produto garante a unicidade).
+    const funnel = await funnelByProduct(ic.productSlug, c7);
     const spend7d = children.reduce((a, c) => a + c.spend7d, 0);
     const goalCpl = ic.goalCpl != null ? Number(ic.goalCpl) : null;
     const cpl7d = funnel.leads > 0 ? spend7d / funnel.leads : null;
@@ -220,13 +234,7 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
     const convVisitLead = funnel.visits > 0 ? (funnel.leads / funnel.visits) * 100 : null;
 
     if (funnel.visits === 0 && funnel.leads === 0) {
-      const utms = ic.mediaCampaigns.map((m) => m.utmCampaign).filter(Boolean);
-      notes.push(
-        `"${ic.name}" → 0 evento na LP. Procurei por campaignSlug em [${[ic.slug, ...utms].join(", ")}]. ` +
-          (utms.length === 0
-            ? "Preencha o utm_campaign de cada mídia (= o utm_campaign dos anúncios) pra casar os leads pagos."
-            : "Confira se esses utm_campaign batem com os dos anúncios."),
-      );
+      notes.push(`"${ic.name}" → 0 evento na LP para productSlug "${ic.productSlug}" nos últimos 7 dias. Confira se a LP envia esse product_slug.`);
     }
 
     blocks.push({
