@@ -60,15 +60,15 @@ KNOWLEDGE BASE A SEGUIR — contexto Impacta + playbook completo de tráfego. Us
 const SYSTEM_TAIL = `\n\n---\n\nOUTPUT: JSON estruturado conforme schema. Gere de 1 a 6 recomendações (qualidade > quantidade — só o que importa hoje). Cada recomendação:
 
 - scope: "PORTFOLIO" | "CAMPAIGN" | "KEYWORD"
-- platform: "META" | "GOOGLE" | null (null se for PORTFOLIO geral)
-- campaignRef: nome/label da campanha alvo, ou null
-- entityRef: keyword/anúncio alvo, ou null
+- platform: "META" | "GOOGLE" | "" (string vazia se for PORTFOLIO geral)
+- campaignRef: nome/label da campanha alvo, ou "" (string vazia)
+- entityRef: keyword/anúncio alvo, ou "" (string vazia)
 - priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
 - category: "PAUSE" | "SCALE" | "REALLOCATE" | "BID" | "NEGATIVE" | "CREATIVE" | "TRACKING" | "ALERT"
 - problem: o problema COM o número que o justifica (texto puro). Ex: "Corp PJ Meta gastou R$ 92 em 7d e gerou 0 lead (mediana da carteira: CPL R$ 28)."
 - action: a ação concreta e executável em menos de 60min (texto puro). Ex: "Pausar a campanha Corp PJ e realocar os R$ 13/dia pra Hub Search G1, que está com CPL R$ 13 (meta 30)."
-- expectedImpact: efeito esperado quantificado (texto puro), ou null. Ex: "Recupera ~R$ 90/semana de budget e deve gerar +3 leads/semana no mesmo gasto."
-- evidence: objeto JSON com os números-chave que embasam (ex: {"spend7d":92,"leads7d":0,"cpl":null,"medianCpl":28}).
+- expectedImpact: efeito esperado quantificado (texto puro), ou "" (string vazia). Ex: "Recupera ~R$ 90/semana de budget e deve gerar +3 leads/semana no mesmo gasto."
+- evidence: TEXTO curto com os números-chave que embasam (ou "" se não houver). Ex: "spend7d R$ 92, leads 0, mediana CPL R$ 28".
 
 REGRAS:
 - Se a carteira está saudável e não há movimento que valha a pena, gere 1 recomendação de "manter e observar X por mais 24h".
@@ -78,15 +78,15 @@ REGRAS:
 type RecOutput = {
   recommendations: Array<{
     scope: string;
-    platform: string | null;
-    campaignRef: string | null;
-    entityRef: string | null;
+    platform: string;
+    campaignRef: string;
+    entityRef: string;
     priority: string;
     category: string;
     problem: string;
     action: string;
-    expectedImpact: string | null;
-    evidence: unknown;
+    expectedImpact: string;
+    evidence: string;
   }>;
 };
 
@@ -99,15 +99,15 @@ const OUTPUT_SCHEMA = {
         type: "object",
         properties: {
           scope: { type: "string", enum: ["PORTFOLIO", "CAMPAIGN", "KEYWORD"] },
-          platform: { type: ["string", "null"], enum: ["META", "GOOGLE", null] },
-          campaignRef: { type: ["string", "null"] },
-          entityRef: { type: ["string", "null"] },
+          platform: { type: "string", enum: ["META", "GOOGLE", ""] },
+          campaignRef: { type: "string" },
+          entityRef: { type: "string" },
           priority: { type: "string", enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
           category: { type: "string", enum: ["PAUSE", "SCALE", "REALLOCATE", "BID", "NEGATIVE", "CREATIVE", "TRACKING", "ALERT"] },
           problem: { type: "string" },
           action: { type: "string" },
-          expectedImpact: { type: ["string", "null"] },
-          evidence: { type: ["object", "null"] },
+          expectedImpact: { type: "string" },
+          evidence: { type: "string" },
         },
         required: ["scope", "platform", "campaignRef", "entityRef", "priority", "category", "problem", "action", "expectedImpact", "evidence"],
         additionalProperties: false,
@@ -226,15 +226,15 @@ export async function generatePortfolioRecs(opts: {
         data: out.recommendations.map((r) => ({
           date: dayStart,
           scope: r.scope,
-          platform: r.platform ?? null,
-          campaignRef: r.campaignRef ?? null,
-          entityRef: r.entityRef ?? null,
+          platform: r.platform || null,
+          campaignRef: r.campaignRef || null,
+          entityRef: r.entityRef || null,
           priority: r.priority,
           category: r.category,
           problem: r.problem,
           action: r.action,
-          expectedImpact: r.expectedImpact ?? null,
-          evidence: r.evidence ? JSON.parse(JSON.stringify(r.evidence)) : undefined,
+          expectedImpact: r.expectedImpact || null,
+          evidence: r.evidence ? { nota: r.evidence } : undefined,
           status: "OPEN",
         })),
       });
