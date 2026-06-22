@@ -82,7 +82,16 @@ export function GestorTrafego({
         setMsg("Erro: " + (data.recs?.reason || data.error || res.statusText));
         return;
       }
-      setMsg(`Análise atualizada: ${data.recs?.count ?? 0} recomendações.`);
+      const ig = data.ingest;
+      const side = (x: unknown) => {
+        const s = x as { campaignsMatched?: number; samplesUpserted?: number; skipped?: boolean; skipReason?: string; error?: string } | undefined;
+        if (!s) return "—";
+        if (s.error) return `erro: ${s.error}`;
+        if (s.skipped) return `skip (${s.skipReason})`;
+        return `${s.campaignsMatched ?? 0} camp · ${s.samplesUpserted ?? 0} amostras`;
+      };
+      const ingestMsg = ig ? ` | Ingestão → Meta: ${side(ig.meta)} · Google: ${side(ig.google)}` : "";
+      setMsg(`Análise atualizada: ${data.recs?.count ?? 0} recomendações.${ingestMsg}`);
       router.refresh();
     } catch (e) {
       setMsg("Erro: " + (e instanceof Error ? e.message : String(e)));

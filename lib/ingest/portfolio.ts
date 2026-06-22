@@ -149,8 +149,8 @@ export async function ingestMetaPortfolio(opts: { days?: number }): Promise<Port
   const adAccountId = raw.startsWith("act_") ? raw : `act_${raw}`;
 
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${adAccountId}/insights`);
-  url.searchParams.set("fields", "spend,impressions,clicks");
-  url.searchParams.set("level", "campaign"); // traz campaign_id + campaign_name automaticamente
+  url.searchParams.set("fields", "campaign_id,campaign_name,spend,impressions,clicks");
+  url.searchParams.set("level", "campaign");
   url.searchParams.set("time_range", JSON.stringify({ since: spDate(days - 1), until: spDate(0) }));
   url.searchParams.set("time_increment", "1");
   url.searchParams.set("limit", "500");
