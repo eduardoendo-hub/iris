@@ -263,10 +263,12 @@ export async function generatePortfolioRecs(opts: {
     return { outcome: "dry_run", reason: `system=${(SYSTEM_HEAD + knowledge + SYSTEM_TAIL).length} chars, user=${userPrompt.length} chars, campanhas=${opts.snapshot.campaigns.length}` };
   }
 
-  const client = new Anthropic({ apiKey });
-  let resp;
-  try {
-    resp = await client.messages.create({
+  // maxRetries do SDK já cobre 408/409/429/5xx com backoff; aumentamos pra
+  // aguentar 500/overloaded transitórios da API (visto em prod).
+  const client = new Anthropic({ apiKey, maxRetries: 5 });
+
+  const callLLM = () =>
+    client.messages.create({
       model: MODEL,
       max_tokens: 16000,
       thinking: { type: "adaptive" },
@@ -278,8 +280,26 @@ export async function generatePortfolioRecs(opts: {
       output_config: { format: { type: "json_schema", schema: OUTPUT_SCHEMA } },
       messages: [{ role: "user", content: userPrompt }],
     });
-  } catch (err) {
-    return { outcome: "error", reason: `anthropic_api_error: ${err instanceof Error ? err.message : String(err)}` };
+
+  // Retry manual extra por cima do SDK: 3 tentativas em erros transitórios
+  // (500/529/overloaded/timeout), com backoff. Erros 4xx (ex: schema) não re-tentam.
+  let resp;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      resp = await callLLM();
+      break;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const status = (err as { status?: number })?.status;
+      const transient = status === undefined || status >= 500 || status === 429 || /overloaded|internal server error|timeout|econnreset|fetch failed/i.test(msg);
+      if (!transient || attempt === 2) break;
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
+  }
+  if (!resp) {
+    return { outcome: "error", reason: `anthropic_api_error: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}` };
   }
 
   const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
