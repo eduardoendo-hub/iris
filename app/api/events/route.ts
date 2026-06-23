@@ -56,6 +56,9 @@ const ALLOWED_ORIGINS = new Set([
   // Ambas reportam product_slug='corporativo' pra agregar numa campanha so.
   "https://corporate.technowhub.ai",     // hub corporativo
   "https://ia-corporate.technowhub.ai",  // pagina de IA corporativa
+  // Formacao MySQL Profissional (produto 'mysql') — curso EAD, parceria Olhar Digital
+  "https://mysql.technowhub.ai",         // canonico (LP servida via Coolify)
+  "https://mysql.impacta.com.br",        // futuro espelho/redirect -> technowhub
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev

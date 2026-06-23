@@ -170,6 +170,23 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // Sem Engaged: corporate gera LEADS (form -> RD Station), nao vendas Engaged.
   },
 
+  "mysql": {
+    slug: "mysql",
+    name: "Formação MySQL Profissional",
+    // LP servida em mysql.technowhub.ai (Coolify, nginx). Curso EAD de banco de
+    // dados: SQL, modelagem, MySQL, procedures/triggers/functions. Em parceria
+    // com o Olhar Digital. Repo: eduardoendo-hub/mysql-lp.
+    lpUrl: "https://mysql.technowhub.ai",
+    // Convencao esperada nas campanhas Meta/Google: nome contendo "MYSQL"
+    // (ex.: "M1-PROSP-MYSQL-JUL26", "G1-SEARCH-MYSQL-JUL26").
+    metaCampaignFilter: "MYSQL",
+    googleCampaignFilter: "MYSQL",
+    campaignSlug: "mysql-lancamento",
+    // Engaged checkout SharedID — extraido do BUY_URL da LP:
+    //   https://impacta.site.engaged.com.br/p/checkout/nu3qkxhw84
+    engagedCheckoutSharedIds: ["nu3qkxhw84"],
+  },
+
   // Future products — descomentar quando entrarem:
   //
   // "direito5": {
