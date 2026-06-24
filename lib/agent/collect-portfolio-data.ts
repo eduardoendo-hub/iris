@@ -134,14 +134,21 @@ async function funnelByProduct(productSlug: string, from: Date) {
   return reduceFunnel(ev);
 }
 
-// Nível da MÍDIA: a LP grava campaignSlug = utm_campaign (tráfego pago), então
-// os leads de uma campanha de mídia casam pelo utm_campaign dela.
-async function funnelBySlugs(slugs: string[], from: Date) {
-  const clean = Array.from(new Set(slugs.filter(Boolean)));
-  if (clean.length === 0) return { visits: 0, leads: 0, whats: 0 };
+// Fontes (utm_source) consideradas pagas por plataforma. Permite separar leads
+// do Meta dos do Google/RD/email mesmo quando compartilham o MESMO utm_campaign.
+const PAID_SOURCES: Record<string, string[]> = {
+  META: ["meta", "facebook", "fb", "instagram", "ig"],
+  GOOGLE: ["google", "google-ads", "googleads", "gads"],
+};
+
+// Nível da MÍDIA: a LP grava campaignSlug = utm_campaign. Mas Meta e RD/email
+// podem usar o MESMO utm_campaign — então casamos TAMBÉM pela fonte (utm_source)
+// da plataforma, pra não contar lead de email como se fosse do Meta.
+async function funnelByCampaignSource(utm: string, platform: "META" | "GOOGLE", from: Date) {
+  const sources = PAID_SOURCES[platform] ?? [];
   const ev = await prisma.visitEvent.groupBy({
     by: ["eventName"],
-    where: { campaignSlug: { in: clean }, ts: { gte: from } },
+    where: { campaignSlug: utm, utmSource: { in: sources }, ts: { gte: from } },
     _count: { _all: true },
   });
   return reduceFunnel(ev);
@@ -210,7 +217,7 @@ export async function collectPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       let childLeads: number | null = null;
       let childCpl: number | null = null;
       if (mc.utmCampaign) {
-        const f = await funnelBySlugs([mc.utmCampaign], c7);
+        const f = await funnelByCampaignSource(mc.utmCampaign, mc.platform as "META" | "GOOGLE", c7);
         childLeads = f.leads;
         childCpl = f.leads > 0 ? spend7d / f.leads : null;
       }
