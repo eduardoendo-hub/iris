@@ -238,12 +238,38 @@ export default async function CockpitPage({
       0
     );
 
-    // FALLBACK: quando o spend de HOJE é 0 (deploy recém-rodado, cron
-    // ainda não pegou, dia em pausa), o card de Investimento ficava
-    // mostrando o mock (0). Se o mês acumulado > 0, mostra ele — é
-    // melhor ver o gasto real da campanha do que R$ 0 falso.
-    // mediaInvestmentIsMonth marca pra hint do card refletir corretamente.
-    if (spendTodayTotal === 0 && mediaInvestmentMonth > 0) {
+    // FONTE PREFERIDA: campanhas de mídia LINKADAS a esta campanha IRIS
+    // (CampaignMetricSample, por ID) — mesma fonte do Gestor de Tráfego. Quando
+    // há vínculo, é a fonte de verdade; somamos os ajustes MANUAL por cima.
+    let usedLinked = false;
+    if (activeCampaignEarly?.id) {
+      const linked = await prisma.trackedCampaign.findMany({
+        where: { campaignId: activeCampaignEarly.id, active: true, externalId: { not: null } },
+        select: { platform: true, externalId: true },
+      });
+      if (linked.length > 0) {
+        const orKeys = linked.map((l) => ({ platform: l.platform, externalId: l.externalId as string }));
+        const [todayAgg, monthAgg] = await Promise.all([
+          prisma.campaignMetricSample.aggregate({ where: { metric: "spend", bucket: "DAY", startsAt: todayUTC, OR: orKeys }, _sum: { value: true } }),
+          prisma.campaignMetricSample.aggregate({ where: { metric: "spend", bucket: "DAY", startsAt: { gte: monthStartUTC }, OR: orKeys }, _sum: { value: true } }),
+        ]);
+        const manualToday = Number(spendTodaySamples.find((s) => s.source === "MANUAL")?._sum.value ?? 0);
+        const manualMonth = Number(spendMonthSamples.find((s) => s.source === "MANUAL")?._sum.value ?? 0);
+        const todayLinked = Number(todayAgg._sum.value ?? 0) + manualToday;
+        mediaInvestmentMonth = Number(monthAgg._sum.value ?? 0) + manualMonth;
+        if (todayLinked > 0) {
+          mediaInvestment = todayLinked;
+          mediaInvestmentIsMonth = false;
+        } else if (mediaInvestmentMonth > 0) {
+          mediaInvestment = mediaInvestmentMonth;
+          mediaInvestmentIsMonth = true;
+        }
+        usedLinked = true;
+      }
+    }
+
+    // FALLBACK (fonte antiga por produto): só quando NÃO há campanhas linkadas.
+    if (!usedLinked && spendTodayTotal === 0 && mediaInvestmentMonth > 0) {
       mediaInvestment = mediaInvestmentMonth;
       mediaInvestmentIsMonth = true;
     }
