@@ -37,13 +37,14 @@ export default async function AdminPage() {
   }
 
   // Contadores rapidos pros cards
-  const [campaignsCount, activeCampaigns, allowedEmails, allowedDomains, trackedActive, openRecs] = await Promise.all([
+  const [campaignsCount, activeCampaigns, allowedEmails, allowedDomains, trackedActive, openRecs, channelGroups] = await Promise.all([
     prisma.campaign.count(),
     prisma.campaign.count({ where: { isActive: true } }),
     prisma.allowedEmail.count(),
     prisma.allowedDomain.count(),
     prisma.trackedCampaign.count({ where: { active: true } }),
     prisma.agentRecommendation.count({ where: { status: "OPEN" } }),
+    prisma.channelGroup.count(),
   ]);
 
   return (
@@ -121,6 +122,12 @@ export default async function AdminPage() {
             title="Campanhas rastreadas"
             subtitle={`${trackedActive} ativa${trackedActive === 1 ? "" : "s"}`}
             description="Visão global (read-only) das campanhas de mídia atreladas. O vínculo é feito dentro de cada campanha → seção Mídia paga."
+          />
+          <AdminCard
+            href="/admin/channel-groups"
+            title="Grupos de canal"
+            subtitle={`${channelGroups} grupo${channelGroups === 1 ? "" : "s"}`}
+            description="Regra global Orgânico/Meta/Google/Mailing/Portal por utm_source/medium. Agrupa a tabela 'Por fonte (UTM)' do cockpit."
           />
         </div>
 

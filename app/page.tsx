@@ -27,6 +27,7 @@ import {
 } from "@/components/icons";
 import { prisma } from "@/lib/prisma";
 import { getCampaignWindow } from "@/lib/campaigns";
+import { DEFAULT_CHANNEL_RULES, type ChannelRule } from "@/lib/channel-groups";
 import {
   MOCK_KPIS,
   MOCK_CHANNELS,
@@ -963,6 +964,12 @@ export default async function CockpitPage({
     },
   ];
 
+  // Regras de grupo de canal (global). Sem registros no banco → usa defaults.
+  const channelGroupRows = await prisma.channelGroup.findMany({ orderBy: { ordem: "asc" } });
+  const channelRules: ChannelRule[] = channelGroupRows.length
+    ? channelGroupRows.map((g) => ({ name: g.name, color: g.color, ordem: g.ordem, sources: g.sources, mediums: g.mediums, matchEmptySource: g.matchEmptySource }))
+    : DEFAULT_CHANNEL_RULES;
+
   return (
     <div className="min-h-screen flex flex-col">
       <Topbar />
@@ -1124,6 +1131,7 @@ export default async function CockpitPage({
           <CaptacaoSourceTable
             rows={captacaoRows}
             periodLabel={activeCampaignEarly ? "toda a campanha" : "últimos 14 dias"}
+            channelRules={channelRules}
           />
           <EngagedLeadsTable rows={engagedLeads} totalCount={engagedLeadsCount} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

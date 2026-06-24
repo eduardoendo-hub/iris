@@ -699,3 +699,21 @@ model AgentRecommendation {
   @@index([date, priority])
   @@index([status])
 }
+
+// Grupo de canal de negócio (Orgânico, Meta, Google, Mailing, Portal, ...) —
+// classifica o tráfego da LP por utm_source/utm_medium. Regra GLOBAL (vale pra
+// todas as campanhas), editável via /admin/channel-groups. Usado pra agrupar a
+// tabela "Por fonte (UTM)" do cockpit.
+model ChannelGroup {
+  id               String   @id @default(cuid())
+  name             String   @unique // "Meta", "Google", "Orgânico", "Mailing", "Portal"
+  ordem            Int      @default(0) // ordem de avaliação E exibição (menor = primeiro)
+  color            String? // hex do badge (ex: "#1877F2")
+  sources          String[] @default([]) // utm_source (lowercase) que caem aqui
+  mediums          String[] @default([]) // utm_medium (lowercase) que caem aqui
+  matchEmptySource Boolean  @default(false) // captura tráfego sem utm_source (direto/orgânico)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([ordem])
+}
