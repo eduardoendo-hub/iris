@@ -188,34 +188,50 @@ export async function getDailyInvestments(opts: {
   const days = Math.min(Math.max(opts.days, 1), 90);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  let samples: Array<{ startsAt: Date; value: unknown; source: string }> = [];
-  try {
-    samples = await prisma.metricSample.findMany({
-      where: {
-        productSlug,
-        bucket: "DAY",
-        metric: "spend",
-        source: { in: [...MEDIA_SPEND_SOURCES] },
-        startsAt: { gte: since },
-      },
-      orderBy: { startsAt: "asc" },
-      select: { startsAt: true, value: true, source: true },
-    });
-  } catch {
-    samples = [];
-  }
-
   const dateRange = spDateRange(days);
   const map = new Map<string, { meta: number; google: number; other: number }>();
   for (const dt of dateRange) map.set(dt, { meta: 0, google: 0, other: 0 });
-  for (const s of samples) {
-    const dt = spDateString(s.startsAt);
-    const slot = map.get(dt);
-    if (!slot) continue;
-    const v = Number(s.value);
-    if (s.source === "META_ADS") slot.meta += v;
-    else if (s.source === "GOOGLE_ADS") slot.google += v;
-    else slot.other += v; // MANUAL legado
+
+  try {
+    // FONTE DE VERDADE: campanhas LINKADAS à campanha ATIVA do produto
+    // (CampaignMetricSample). Sem vínculo, cai no agregado antigo (MetricSample).
+    const camp = await prisma.campaign.findFirst({ where: { productSlug, status: "ACTIVE" }, select: { id: true } });
+    const linked = camp?.id
+      ? await prisma.trackedCampaign.findMany({ where: { campaignId: camp.id, active: true, externalId: { not: null } }, select: { platform: true, externalId: true } })
+      : [];
+    if (linked.length > 0) {
+      const ids = linked.map((l) => l.externalId as string);
+      const [linkedSamples, manualSamples] = await Promise.all([
+        prisma.campaignMetricSample.findMany({ where: { externalId: { in: ids }, metric: "spend", bucket: "DAY", startsAt: { gte: since } }, select: { startsAt: true, value: true, platform: true } }),
+        prisma.metricSample.findMany({ where: { productSlug, bucket: "DAY", metric: "spend", source: "MANUAL", startsAt: { gte: since } }, select: { startsAt: true, value: true } }),
+      ]);
+      for (const s of linkedSamples) {
+        const slot = map.get(spDateString(s.startsAt));
+        if (!slot) continue;
+        const v = Number(s.value);
+        if (s.platform === "META") slot.meta += v;
+        else if (s.platform === "GOOGLE") slot.google += v;
+      }
+      for (const s of manualSamples) {
+        const slot = map.get(spDateString(s.startsAt));
+        if (slot) slot.other += Number(s.value);
+      }
+    } else {
+      const samples = await prisma.metricSample.findMany({
+        where: { productSlug, bucket: "DAY", metric: "spend", source: { in: [...MEDIA_SPEND_SOURCES] }, startsAt: { gte: since } },
+        select: { startsAt: true, value: true, source: true },
+      });
+      for (const s of samples) {
+        const slot = map.get(spDateString(s.startsAt));
+        if (!slot) continue;
+        const v = Number(s.value);
+        if (s.source === "META_ADS") slot.meta += v;
+        else if (s.source === "GOOGLE_ADS") slot.google += v;
+        else slot.other += v;
+      }
+    }
+  } catch {
+    /* tabelas inexistentes — mapa fica zerado */
   }
 
   let cum = 0;
@@ -247,6 +263,7 @@ export async function getCampaignResults(opts: {
   const { productSlug } = opts;
 
   const select = {
+    id: true,
     startDate: true,
     endDate: true,
     endedAt: true,
@@ -259,6 +276,7 @@ export async function getCampaignResults(opts: {
 
   let campaign:
     | {
+        id: string;
         startDate: Date;
         endDate: Date;
         endedAt: Date | null;
@@ -336,23 +354,35 @@ export async function getCampaignResults(opts: {
   let mediaMeta = 0;
   let mediaGoogle = 0;
   try {
-    const agg = await prisma.metricSample.groupBy({
-      by: ["source"],
-      where: {
-        productSlug,
-        bucket: "DAY",
-        metric: "spend",
-        source: { in: [...MEDIA_SPEND_SOURCES] },
-        ...startsAtFilter,
-      },
-      _sum: { value: true },
-    });
-    for (const row of agg) {
-      const v = Number(row._sum.value ?? 0);
-      mediaInvestment += v;
-      if (row.source === "META_ADS") mediaMeta += v;
-      else if (row.source === "GOOGLE_ADS") mediaGoogle += v;
-      // MANUAL legado entra só no total de mídia
+    // FONTE DE VERDADE: campanhas de mídia LINKADAS a esta campanha IRIS
+    // (CampaignMetricSample, por ID — mesma do cockpit/Gestor). Sem vínculo,
+    // cai no agregado antigo por produto (MetricSample).
+    const linked = campaign?.id
+      ? await prisma.trackedCampaign.findMany({ where: { campaignId: campaign.id, active: true, externalId: { not: null } }, select: { platform: true, externalId: true } })
+      : [];
+    if (linked.length > 0) {
+      const metaKeys = linked.filter((l) => l.platform === "META").map((l) => l.externalId as string);
+      const googleKeys = linked.filter((l) => l.platform === "GOOGLE").map((l) => l.externalId as string);
+      const [metaAgg, googleAgg, manualAgg] = await Promise.all([
+        prisma.campaignMetricSample.aggregate({ where: { platform: "META", externalId: { in: metaKeys }, metric: "spend", bucket: "DAY", ...startsAtFilter }, _sum: { value: true } }),
+        prisma.campaignMetricSample.aggregate({ where: { platform: "GOOGLE", externalId: { in: googleKeys }, metric: "spend", bucket: "DAY", ...startsAtFilter }, _sum: { value: true } }),
+        prisma.metricSample.aggregate({ where: { productSlug, bucket: "DAY", metric: "spend", source: "MANUAL", ...startsAtFilter }, _sum: { value: true } }),
+      ]);
+      mediaMeta = Number(metaAgg._sum.value ?? 0);
+      mediaGoogle = Number(googleAgg._sum.value ?? 0);
+      mediaInvestment = mediaMeta + mediaGoogle + Number(manualAgg._sum.value ?? 0);
+    } else {
+      const agg = await prisma.metricSample.groupBy({
+        by: ["source"],
+        where: { productSlug, bucket: "DAY", metric: "spend", source: { in: [...MEDIA_SPEND_SOURCES] }, ...startsAtFilter },
+        _sum: { value: true },
+      });
+      for (const row of agg) {
+        const v = Number(row._sum.value ?? 0);
+        mediaInvestment += v;
+        if (row.source === "META_ADS") mediaMeta += v;
+        else if (row.source === "GOOGLE_ADS") mediaGoogle += v;
+      }
     }
   } catch {
     /* tabela inexistente */
