@@ -870,24 +870,36 @@ export default async function CockpitPage({
     const campaignStartUTC = campaignWindow
       ? campaignWindow.sinceUTC
       : new Date(CAMPAIGN_START_ISO + "T03:00:00.000Z");
-    const totalAgg = await prisma.metricSample.aggregate({
-      where: {
-        productSlug: slug,
-        bucket: "DAY",
-        metric: "spend",
-        startsAt: {
-          gte: campaignStartUTC,
-          ...(campaignWindow ? { lt: campaignWindow.untilExclusiveUTC } : {}),
-        },
-        // Inclui MANUAL: investimento de midia lancado a mao (/api/investments)
-        // tem que somar junto com Meta/Google, senao ROAS/CAC ficam inflados.
-        source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] },
-      },
+    const upperLt = campaignWindow ? { lt: campaignWindow.untilExclusiveUTC } : {};
+
+    // MANUAL sempre vem do MetricSample (lançado a mão via /api/investments).
+    const manualAgg = await prisma.metricSample.aggregate({
+      where: { productSlug: slug, bucket: "DAY", metric: "spend", startsAt: { gte: campaignStartUTC, ...upperLt }, source: "MANUAL" },
       _sum: { value: true },
     });
-    spendCampaignTotal = Number(totalAgg._sum.value ?? 0);
+    const manualSpend = Number(manualAgg._sum.value ?? 0);
+
+    // Mídia: FONTE DE VERDADE = campanhas LINKADAS (CampaignMetricSample, mesma
+    // do Gestor). Sem vínculo → cai no agregado antigo por produto (MetricSample).
+    const linked = activeCampaign?.id
+      ? await prisma.trackedCampaign.findMany({ where: { campaignId: activeCampaign.id, active: true, externalId: { not: null } }, select: { platform: true, externalId: true } })
+      : [];
+    if (linked.length > 0) {
+      const orKeys = linked.map((l) => ({ platform: l.platform, externalId: l.externalId as string }));
+      const linkedAgg = await prisma.campaignMetricSample.aggregate({
+        where: { metric: "spend", bucket: "DAY", startsAt: { gte: campaignStartUTC, ...upperLt }, OR: orKeys },
+        _sum: { value: true },
+      });
+      spendCampaignTotal = Number(linkedAgg._sum.value ?? 0) + manualSpend;
+    } else {
+      const totalAgg = await prisma.metricSample.aggregate({
+        where: { productSlug: slug, bucket: "DAY", metric: "spend", startsAt: { gte: campaignStartUTC, ...upperLt }, source: { in: ["META_ADS", "GOOGLE_ADS", "MANUAL"] } },
+        _sum: { value: true },
+      });
+      spendCampaignTotal = Number(totalAgg._sum.value ?? 0);
+    }
   } catch {
-    // tabela MetricSample nao existe ainda
+    // tabela MetricSample/CampaignMetricSample nao existe ainda
   }
 
   // Investimento TOTAL da campanha = midia (Meta+Google+manual) + custos de
