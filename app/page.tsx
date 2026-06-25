@@ -1002,11 +1002,17 @@ export default async function CockpitPage({
     },
   ];
 
-  // Regras de grupo de canal (global). Sem registros no banco → usa defaults.
-  const channelGroupRows = await prisma.channelGroup.findMany({ orderBy: { ordem: "asc" } });
-  const channelRules: ChannelRule[] = channelGroupRows.length
-    ? channelGroupRows.map((g) => ({ name: g.name, color: g.color, ordem: g.ordem, sources: g.sources, mediums: g.mediums, matchEmptySource: g.matchEmptySource }))
-    : DEFAULT_CHANNEL_RULES;
+  // Regras de grupo de canal (global). Sem tabela/registros → usa defaults.
+  // try/catch: se a migração ChannelGroup ainda não rodou, NÃO derruba a página.
+  let channelRules: ChannelRule[] = DEFAULT_CHANNEL_RULES;
+  try {
+    const channelGroupRows = await prisma.channelGroup.findMany({ orderBy: { ordem: "asc" } });
+    if (channelGroupRows.length) {
+      channelRules = channelGroupRows.map((g) => ({ name: g.name, color: g.color, ordem: g.ordem, sources: g.sources, mediums: g.mediums, matchEmptySource: g.matchEmptySource }));
+    }
+  } catch {
+    /* tabela ChannelGroup ainda não existe — usa DEFAULT_CHANNEL_RULES */
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

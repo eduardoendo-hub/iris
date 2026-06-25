@@ -44,7 +44,7 @@ export default async function AdminPage() {
     prisma.allowedDomain.count(),
     prisma.trackedCampaign.count({ where: { active: true } }),
     prisma.agentRecommendation.count({ where: { status: "OPEN" } }),
-    prisma.channelGroup.count(),
+    prisma.channelGroup.count().catch(() => 0),
   ]);
 
   return (
