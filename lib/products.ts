@@ -71,9 +71,9 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // Campanha real no Meta: "M1-PROSP-CLAUDEPRO-MAI26" → bate com CONTAIN "CLAUDEPRO"
     metaCampaignFilter: "CLAUDEPRO",
     googleCampaignFilter: "CLAUDEPRO",
-    // Turma vigente = Julho/2026 (Turma 2). campaignSlug e' usado no push de
+    // Turma vigente = Agosto/2026 (Turma 3, remarcada p/ 03/08). campaignSlug e' usado no push de
     // lead DRAFT do Engaged pro RD CRM — tem que apontar pra turma ativa.
-    campaignSlug: "claude-pro-julho-2026",
+    campaignSlug: "claude-pro-agosto-2026",
     // sharedId/productId: julho (72rspa5wc8 / 6a208a4cccd3d6001cbf58dd) primeiro;
     // maio (x68jpj7w3k / 69fe...) mantido p/ nao regredir webhooks em transito
     // da turma anterior (a campanha ENDED ja barra no gate do webhook).
