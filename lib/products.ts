@@ -104,7 +104,8 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // (ex.: "M1-PROSP-CODIGOZERO-JUN26", "G1-SEARCH-CODIGOZERO-JUN26").
     metaCampaignFilter: "CODIGOZERO",
     googleCampaignFilter: "CODIGOZERO",
-    campaignSlug: "codigozero-junho-2026",
+    // Turma remarcada: início 03/08/2026 (antes 29/06). campaignSlug vigente = agosto.
+    campaignSlug: "codigozero-agosto-2026",
     // Engaged checkout SharedID — extraído de
     //   https://impacta.site.engaged.com.br/p/checkout/wpjw515nvn
     engagedCheckoutSharedIds: ["wpjw515nvn"],
