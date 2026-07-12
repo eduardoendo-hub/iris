@@ -52,6 +52,7 @@ const CampaignCreate = z.object({
   marketingPlanFilename: nullishString,
   isActive: z.boolean().optional(),
   engagedCheckoutSharedIds: z.array(z.string().min(1)).optional(),
+  impactaTurmaId: nullishString,
 });
 
 export async function GET(req: NextRequest) {

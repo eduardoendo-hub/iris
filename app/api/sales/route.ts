@@ -24,7 +24,7 @@ function authorized(req: NextRequest): boolean {
 
 const SaleInput = z.object({
   productSlug: z.string().min(2).max(64),
-  source: z.enum(["ENGAGED", "DIRETA", "CONSULTOR", "MANUAL", "OTHER"]).default("DIRETA"),
+  source: z.enum(["ENGAGED", "DIRETA", "CONSULTOR", "SISTEMA", "MANUAL", "OTHER"]).default("DIRETA"),
   customerName: z.string().min(1).max(200),
   customerEmail: z.string().email().nullish(),
   customerPhone: z.string().max(40).nullish(),

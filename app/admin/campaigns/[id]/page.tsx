@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { Topbar } from "@/components/Topbar";
 import { CampaignForm, type CampaignInitial } from "@/components/CampaignForm";
 import { CampaignMediaLinks } from "@/components/CampaignMediaLinks";
+import { ImpactaReconcile } from "@/components/ImpactaReconcile";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function EditCampaignPage({
     isActive: c.isActive,
     status: c.status,
     engagedCheckoutSharedIds: c.engagedCheckoutSharedIds,
+    impactaTurmaId: c.impactaTurmaId,
   };
 
   return (
@@ -95,6 +97,7 @@ export default async function EditCampaignPage({
           </Link>
         </header>
         <CampaignForm initial={initial} />
+        <ImpactaReconcile campaignId={c.id} turmaId={c.impactaTurmaId} />
         <CampaignMediaLinks campaignId={c.id} goalCpl={c.goalCpl ? Number(c.goalCpl) : null} />
       </main>
     </div>

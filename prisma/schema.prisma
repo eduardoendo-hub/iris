@@ -97,6 +97,11 @@ model Campaign {
   // Proveniencia: slug da campanha de origem quando criada via "clonar" (Feature B).
   clonedFromSlug  String?
 
+  // ID da turma no sistema interno da Impacta (API de matriculas). Usado pela
+  // conciliacao pra bater na API (turma_id=<isto>) e importar matriculas pagas
+  // que a IRIS nao tem (vendas por fora do Engaged). Editavel na tela de config.
+  impactaTurmaId  String?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   createdByUserId String?
@@ -322,9 +327,12 @@ model Sale {
   campaignSlug String?
   source      SaleSource @default(DIRETA)
 
-  customerName  String
-  customerEmail String?
-  customerPhone String?
+  customerName     String
+  customerEmail    String?
+  customerPhone    String?
+  // CPF do cliente. Preenchido nas vendas importadas da API de matriculas da
+  // Impacta (conciliacao). Vendas Engaged/manuais legadas ficam null.
+  customerDocument String?
 
   amount   Decimal @db.Decimal(10, 2)
   currency String  @default("BRL")
@@ -352,6 +360,7 @@ enum SaleSource {
   ENGAGED   // checkout do Engaged (webhook Purchase, futuro)
   DIRETA    // venda direta (manual: checkout/transferencia/outro)
   CONSULTOR // venda fechada por consultor (manual)
+  SISTEMA   // importada da API de matriculas da Impacta (venda por fora do Engaged)
   MANUAL    // legado — mantido pra compat (nao usar mais em vendas novas)
   OTHER     // outra fonte (Hotmart, etc.)
 }

@@ -84,6 +84,7 @@ const SOURCE_META: Record<
   ENGAGED:   { label: "Engaged",   color: "#30D158", bg: "rgba(48,209,88,0.15)",   icon: <CartIcon size={11} /> },
   DIRETA:    { label: "Direta",    color: "#0ABAB5", bg: "rgba(10,186,181,0.15)", icon: <CartIcon size={11} /> },
   CONSULTOR: { label: "Consultor", color: "#D97757", bg: "rgba(217,119,87,0.15)", icon: <ConsultorIcon size={11} /> },
+  SISTEMA:   { label: "Sistema",   color: "#B08CFF", bg: "rgba(176,140,255,0.16)", icon: null },
   MANUAL:    { label: "Manual",    color: "#9ABABA", bg: "rgba(154,186,186,0.15)", icon: null },
   OTHER:     { label: "Outro",     color: "#9ABABA", bg: "rgba(154,186,186,0.15)", icon: null },
 };
@@ -187,7 +188,7 @@ export function SalesTable({
               fontWeight: 700,
             }}
           >
-            Direta · Consultor · Engaged (auto)
+            Direta · Consultor · Engaged (auto) · Sistema
           </span>
         </header>
 

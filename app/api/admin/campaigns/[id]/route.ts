@@ -59,6 +59,8 @@ const CampaignUpdate = z.object({
   isActive: z.boolean().optional(),
   // SharedIDs do checkout Engaged desta turma (1 por linha no form, array aqui).
   engagedCheckoutSharedIds: z.array(z.string().min(1)).optional(),
+  // Número da turma no sistema interno da Impacta (conciliação de matrículas).
+  impactaTurmaId: nullableString,
 });
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

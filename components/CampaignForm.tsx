@@ -39,6 +39,8 @@ export type CampaignInitial = {
   status?: "DRAFT" | "ACTIVE" | "ENDED";
   /** SharedIDs do checkout Engaged desta turma (1 por linha no form). */
   engagedCheckoutSharedIds?: string[];
+  /** Número da turma no sistema interno da Impacta (conciliação de matrículas). */
+  impactaTurmaId?: string | null;
 };
 
 /** Textarea (1 por linha) -> array limpo, sem vazios nem duplicados. */
@@ -95,6 +97,7 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
   const [engagedSharedIds, setEngagedSharedIds] = useState(
     (initial?.engagedCheckoutSharedIds ?? []).join("\n")
   );
+  const [impactaTurmaId, setImpactaTurmaId] = useState(initial?.impactaTurmaId ?? "");
   const status = initial?.status ?? (initial?.isActive ? "ACTIVE" : "DRAFT");
 
   // Custos totais calculados
@@ -128,6 +131,7 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
     body.marketingPlan = marketingPlan === "" ? null : marketingPlan;
     body.marketingPlanFilename = marketingPlanFilename === "" ? null : marketingPlanFilename;
     body.engagedCheckoutSharedIds = linesToArray(engagedSharedIds);
+    body.impactaTurmaId = impactaTurmaId.trim() === "" ? null : impactaTurmaId.trim();
 
     try {
       const url = editing
@@ -340,6 +344,20 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
                 {isActive ? "Ativa (vai desativar a anterior)" : "Inativa"}
               </span>
             </label>
+          </Field>
+          <Field
+            label="Turma (sistema interno Impacta)"
+            hint="Nº da turma na API de matrículas. A conciliação bate na API com este número pra importar vendas por fora do Engaged."
+          >
+            <input
+              type="text"
+              value={impactaTurmaId}
+              onChange={(e) => setImpactaTurmaId(e.target.value)}
+              placeholder="ex: 175075"
+              inputMode="numeric"
+              {...inputProps}
+              style={{ ...inputProps.style, fontFamily: "var(--font-mono)" }}
+            />
           </Field>
         </div>
       </Section>
