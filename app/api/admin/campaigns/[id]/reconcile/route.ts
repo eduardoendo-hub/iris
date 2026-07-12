@@ -77,15 +77,32 @@ async function runReconcile(campaignId: string, dryRun: boolean) {
     }),
   ]);
 
+  // Match em CAMADAS por confiança (para na primeira que bater):
+  //   1. Import anterior (externalId) — idempotência de re-run.
+  //   2. CPF — AUTORITATIVO: se bate CPF é a mesma pessoa, não olha mais nada.
+  //   3. Heurístico (email exato / telefone / nome) — só quando não há CPF batendo.
+  // Obs.: vendas Engaged/manuais legadas não têm CPF gravado, então a camada 2
+  // só pega imports anteriores por ora; email/nome cobre o histórico.
   function findMatch(e: ImpactaEnrollment): MatchInfo | null {
     const person = { customerEmail: e.email, customerPhone: null, customerName: e.name };
     const cpf = e.cpf;
+
+    // 1. Import anterior (idempotência por externalId).
+    const prior = sales.find(
+      (s) => s.source === "SISTEMA" && s.externalId && s.externalId === e.externalId
+    );
+    if (prior) return { kind: "sale", id: prior.id, source: prior.source, by: "import_id" };
+
+    // 2. CPF autoritativo — bateu, encerra aqui.
+    if (cpf) {
+      const byCpf = sales.find(
+        (s) => s.customerDocument && s.customerDocument.replace(/\D/g, "") === cpf
+      );
+      if (byCpf) return { kind: "sale", id: byCpf.id, source: byCpf.source, by: "cpf" };
+    }
+
+    // 3. Fallback heurístico (email/telefone/nome).
     for (const s of sales) {
-      // import anterior (idempotência) ou CPF já gravado
-      if (s.source === "SISTEMA" && s.externalId && s.externalId === e.externalId)
-        return { kind: "sale", id: s.id, source: s.source, by: "import_id" };
-      if (cpf && s.customerDocument && s.customerDocument.replace(/\D/g, "") === cpf)
-        return { kind: "sale", id: s.id, source: s.source, by: "cpf" };
       if (isSamePerson({ customerEmail: s.customerEmail, customerPhone: s.customerPhone, customerName: s.customerName }, person)) {
         const by = normalizeEmail(s.customerEmail) && normalizeEmail(s.customerEmail) === normalizeEmail(e.email) ? "email" : "nome";
         return { kind: "sale", id: s.id, source: s.source, by };
