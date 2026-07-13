@@ -26,7 +26,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { PRODUCTS, getProductConfig, type ProductConfig } from "@/lib/products";
 import { promoteSiblingLeadsToPaid } from "@/lib/engaged-dedup";
-import { getCampaignBySharedId } from "@/lib/campaigns";
+import { getCampaignBySharedId, getCampaignByTurmaId } from "@/lib/campaigns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -468,6 +468,27 @@ function pickSharedId(p: Parsed): string | null {
   return typeof ck.sharedId === "string" ? ck.sharedId : null;
 }
 
+/**
+ * Extrai o número da turma (sistema interno) do payload. Permite manter o
+ * MESMO link de checkout entre turmas, versionando pela querystring: a LP
+ * anexa ?turma=<id> na URL do checkout e o Engaged devolve em queryParams.
+ * Fallback: metadata.turma (hoje o Engaged manda null, mas fica pronto).
+ * Aceita as chaves turma | turma_id | turmaId.
+ */
+function pickTurmaId(p: Parsed): string | null {
+  const read = (o: Record<string, unknown> | null | undefined): string | null => {
+    if (!o || typeof o !== "object") return null;
+    const v = o.turma ?? o.turma_id ?? o.turmaId;
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s ? s : null;
+  };
+  const fromQp = read(p.queryParams as Record<string, unknown> | undefined);
+  if (fromQp) return fromQp;
+  const md = (p as unknown as { metadata?: Record<string, unknown> | null }).metadata;
+  return read(md);
+}
+
 function matchProduct(p: Parsed): ProductConfig | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ck = (p.checkout ?? {}) as Record<string, any>;
@@ -713,11 +734,16 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   const status = pickStatus(p);
   const externalId = pickExternalId(p);
 
-  // CAMPANHA/TURMA — resolve pela sharedId do checkout (muda por turma, mora
-  // na Campaign). Da atribuicao exata por turma (independe de data) e habilita
-  // o gate de encerramento (Feature A).
+  // CAMPANHA/TURMA — resolve a campanha em 2 vias, nesta precedencia:
+  //   1. TURMA (queryParams.turma): permite manter o MESMO link de checkout
+  //      entre turmas, versionando pela querystring. Resolve por impactaTurmaId.
+  //   2. sharedId do checkout (legado): 1 sharedId por turma.
+  // Da atribuicao exata por turma (independe de data) e habilita o gate de
+  // encerramento (Feature A).
+  const turmaId = pickTurmaId(p);
   const sharedId = pickSharedId(p);
-  const campaign = sharedId ? await getCampaignBySharedId(sharedId) : null;
+  let campaign = turmaId ? await getCampaignByTurmaId(turmaId) : null;
+  if (!campaign && sharedId) campaign = await getCampaignBySharedId(sharedId);
 
   // FILTRO DE PRODUTO — engaged manda webhooks de TODOS os produtos da
   // Impacta pra mesma URL. Sem filtro, viramos coletor de vendas do MBA,

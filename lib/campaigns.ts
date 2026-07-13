@@ -119,6 +119,24 @@ export async function getCampaignBySharedId(sharedId: string) {
   }
 }
 
+/**
+ * Resolve a campanha pelo número da turma do sistema interno (impactaTurmaId).
+ * Usado quando o checkout Engaged mantém o MESMO link entre turmas e versiona
+ * pela querystring (?turma=<id>) — a turma vem no webhook e resolve a campanha
+ * sem depender de sharedId único. Prefere a ATIVA se houver mais de uma.
+ */
+export async function getCampaignByTurmaId(turmaId: string) {
+  if (!turmaId) return null;
+  try {
+    return await prisma.campaign.findFirst({
+      where: { impactaTurmaId: turmaId },
+      orderBy: { isActive: "desc" },
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** Metas/alvos de uma campanha, normalizados pro agente de insight. */
 export type InsightCampaignGoals = {
   matriculas: number;
