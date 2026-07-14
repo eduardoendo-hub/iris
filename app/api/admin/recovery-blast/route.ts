@@ -21,7 +21,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkAdminAuth } from "@/lib/admin-auth";
 import { getProductConfig } from "@/lib/products";
-import { sendWhatsAppTemplate, chatproConfigured, normalizeWaNumber } from "@/lib/chatpro";
+import { sendWhatsAppTemplate, chatproConfigured, normalizeWaNumber, looksSuspiciousPhone } from "@/lib/chatpro";
 import {
   DEFAULT_TEMPLATE_TEXTS,
   firstName,
@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
   for (const c of pool) {
     const digits = (c.rawPhone || "").replace(/\D/g, "");
     if (digits.length < 10) { skip("sem_telefone"); continue; }
+    if (looksSuspiciousPhone(normalizeWaNumber(c.rawPhone!))) { skip("numero_suspeito"); continue; }
     const tail = digits.slice(-8);
     if (seenPhones.has(tail)) { skip("duplicado"); continue; }
     if (c.email && paidEmails.has(c.email.toLowerCase().trim())) { skip("ja_pagou"); continue; }

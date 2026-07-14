@@ -64,6 +64,38 @@ export function normalizeWaNumber(phone: string): string {
   return d;
 }
 
+// DDDs válidos do Brasil (Anatel). Fora dessa lista = número inventado.
+const VALID_DDD = new Set([
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 27, 28, 31, 32, 33, 34, 35, 37,
+  38, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 53, 54, 55, 61, 62, 63, 64, 65, 66,
+  67, 68, 69, 71, 73, 74, 75, 77, 79, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92,
+  93, 94, 95, 96, 97, 98, 99,
+]);
+
+/**
+ * Heurística "esse número parece lixo?" — cliente digita qualquer coisa no
+ * cadastro (0000000, 11111111, número de teste, telefone fixo, etc). Como
+ * WhatsApp exige CELULAR válido, exigimos o formato BR completo:
+ *   55 (DDI) + DDD(2) + 9 + 8 dígitos = 13 dígitos.
+ * Retorna o MOTIVO (string curta) se suspeito, ou null se parece legítimo.
+ * Espera o número já normalizado (normalizeWaNumber).
+ */
+export function looksSuspiciousPhone(normalized: string): string | null {
+  const d = (normalized || "").replace(/\D/g, "");
+  if (!d.startsWith("55")) return "sem_ddi_br";
+  if (d.length !== 13) return `tamanho_${d.length}`; // celular BR = 13 (fixo/curto sai)
+  const ddd = d.slice(2, 4);
+  if (!VALID_DDD.has(Number(ddd))) return `ddd_${ddd}`;
+  const sub = d.slice(4); // 9 dígitos do assinante
+  if (sub[0] !== "9") return "sem_9_celular"; // celular pós-2016 começa com 9
+  if (/(\d)\1{5,}/.test(d)) return "digitos_repetidos"; // 6+ iguais em sequência
+  if (/^(\d)\1+$/.test(sub)) return "assinante_monotonico";
+  if (/(012345|123456|234567|345678|456789|567890|987654|876543|765432|654321)/.test(sub)) {
+    return "sequencia";
+  }
+  return null;
+}
+
 async function getOrCreateSession(number: string): Promise<{ sessionId: string; error?: string }> {
   const c = cfg();
   const r = await post("/sessions/getOrCreateByNumber", {
@@ -86,7 +118,8 @@ async function getOrCreateSession(number: string): Promise<{ sessionId: string; 
 export async function sendWhatsAppText(phone: string, message: string): Promise<ChatProResult> {
   if (!chatproConfigured()) return { ok: false, error: "chatpro_not_configured" };
   const number = normalizeWaNumber(phone);
-  if (number.length < 10) return { ok: false, error: `telefone_invalido: ${phone}` };
+  const suspicious = looksSuspiciousPhone(number);
+  if (suspicious) return { ok: false, error: `numero_suspeito:${suspicious} (${phone})` };
 
   const session = await getOrCreateSession(number);
   if (!session.sessionId) return { ok: false, error: session.error || "no_session" };
@@ -122,7 +155,8 @@ export async function sendWhatsAppTemplate(
 ): Promise<ChatProResult> {
   if (!chatproConfigured()) return { ok: false, error: "chatpro_not_configured" };
   const number = normalizeWaNumber(phone);
-  if (number.length < 10) return { ok: false, error: `telefone_invalido: ${phone}` };
+  const suspicious = looksSuspiciousPhone(number);
+  if (suspicious) return { ok: false, error: `numero_suspeito:${suspicious} (${phone})` };
 
   const c = cfg();
   const url =

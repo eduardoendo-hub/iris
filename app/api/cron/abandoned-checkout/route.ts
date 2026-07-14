@@ -24,7 +24,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
-import { sendWhatsAppText, sendWhatsAppTemplate, chatproConfigured, normalizeWaNumber } from "@/lib/chatpro";
+import { sendWhatsAppText, sendWhatsAppTemplate, chatproConfigured, normalizeWaNumber, looksSuspiciousPhone } from "@/lib/chatpro";
 import {
   RECOVERY_STEPS,
   MAX_STEPS,
@@ -166,6 +166,7 @@ export async function GET(req: NextRequest) {
     for (const lead of candidates) {
       const phoneDigits = (lead.customerPhone || "").replace(/\D/g, "");
       if (phoneDigits.length < 10) { skip("sem_telefone"); continue; }
+      if (looksSuspiciousPhone(normalizeWaNumber(lead.customerPhone!))) { skip("numero_suspeito"); continue; }
       if (lead.customerEmail && paidEmails.has(lead.customerEmail.toLowerCase().trim())) { skip("ja_pagou"); continue; }
       if (paidPhones.has(phoneDigits.slice(-8))) { skip("ja_pagou"); continue; }
 
