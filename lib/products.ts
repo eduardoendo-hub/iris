@@ -142,9 +142,9 @@ export const PRODUCTS: Record<string, ProductConfig> = {
   "qa-next": {
     slug: "qa-next",
     name: "QA Next",
-    // LP servida em qanext.impacta.com.br (Coolify, nginx). Imersao QA +
+    // LP servida em qanext.technowhub.ai (Coolify, nginx). Imersao QA +
     // automacao (Playwright) + IA, turma agosto/2026. Repo: eduardoendo-hub/qa-next.
-    lpUrl: "https://qanext.impacta.com.br",
+    lpUrl: "https://qanext.technowhub.ai",
     // Convencao esperada nas campanhas Meta/Google: nome contendo "QANEXT"
     // (ex.: "M1-PROSP-QANEXT-AGO26", "G1-SEARCH-QANEXT-AGO26").
     metaCampaignFilter: "QANEXT",
