@@ -709,6 +709,33 @@ model AgentRecommendation {
   @@index([status])
 }
 
+// ============================================================
+// RECOVERY TOUCH — toques de recuperação de checkout abandonado
+// ============================================================
+// Cada linha = 1 mensagem enviada (WhatsApp via ChatPro) pra um
+// EngagedPurchase não-PAID, pelo cron /api/cron/abandoned-checkout.
+// Cadência: step 1 (30min) → 2 (24h) → 3 (72h, cupom). Máx 3 toques.
+// Dry-run NÃO grava aqui (só preview) — logo, existir linha = foi enviado
+// (ou deu erro no envio, status="error").
+model RecoveryTouch {
+  id                String   @id @default(cuid())
+  engagedPurchaseId String
+  productSlug       String
+  campaignSlug      String?
+  channel           String   @default("whatsapp")
+  step              Int      // 1 | 2 | 3
+  templateKey       String   // ex: "step1_refused"
+  message           String   @db.Text // texto exato enviado (auditoria)
+  phone             String?
+  status            String   // "sent" | "error"
+  error             String?
+  sentAt            DateTime @default(now())
+
+  @@unique([engagedPurchaseId, step]) // idempotência: 1 envio por passo
+  @@index([engagedPurchaseId])
+  @@index([productSlug, sentAt])
+}
+
 // Grupo de canal de negócio (Orgânico, Meta, Google, Mailing, Portal, ...) —
 // classifica o tráfego da LP por utm_source/utm_medium. Regra GLOBAL (vale pra
 // todas as campanhas), editável via /admin/channel-groups. Usado pra agrupar a

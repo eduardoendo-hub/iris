@@ -326,6 +326,14 @@ export default async function CockpitPage({
      *  do attribution; pra WHATSAPP vem dos campos utm* do Lead. */
     attribution: Record<string, string | null> | null;
     sourcePage: string | null; // só pra WhatsApp (Lead.sourcePage)
+    /** Toques da cadência de recuperação (WhatsApp automático). */
+    recoveryTouches?: Array<{
+      step: number;
+      status: string;
+      sentAt: Date;
+      templateKey: string;
+      message: string;
+    }>;
   }> = [];
   try {
     // 1. Coleta TODOS os emails/telefones que ja pagaram (Sale + EngagedPurchase=PAID)
@@ -409,6 +417,24 @@ export default async function CockpitPage({
       if (p) engagedKeys.add("p:" + p);
     }
 
+    // 4b. Toques de recuperação (WhatsApp automático) dos leads Engaged.
+    // try/catch: tabela pode não existir antes da migration — cockpit não cai.
+    const touchesByPurchase = new Map<
+      string,
+      Array<{ step: number; status: string; sentAt: Date; templateKey: string; message: string }>
+    >();
+    try {
+      const touches = await prisma.recoveryTouch.findMany({
+        where: { engagedPurchaseId: { in: engagedFiltered.map((r) => r.id) } },
+        select: { engagedPurchaseId: true, step: true, status: true, sentAt: true, templateKey: true, message: true },
+      });
+      for (const t of touches) {
+        const arr = touchesByPurchase.get(t.engagedPurchaseId) ?? [];
+        arr.push({ step: t.step, status: t.status, sentAt: t.sentAt, templateKey: t.templateKey, message: t.message });
+        touchesByPurchase.set(t.engagedPurchaseId, arr);
+      }
+    } catch { /* RecoveryTouch ainda não migrada — segue sem coluna */ }
+
     // 5. Normaliza ambos em rows unificadas
     type Row = (typeof engagedLeads)[number];
     const rows: Row[] = [];
@@ -432,6 +458,7 @@ export default async function CockpitPage({
         lastUpdatedAt: r.lastUpdatedAt,
         attribution: attr,
         sourcePage: null,
+        recoveryTouches: touchesByPurchase.get(r.id),
       });
     }
     for (const r of waFiltered) {

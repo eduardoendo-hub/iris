@@ -32,6 +32,14 @@ type Row = {
   attribution?: Record<string, string | null> | null;
   /** URL da LP de origem — só preenchido pra WhatsApp Lead. */
   sourcePage?: string | null;
+  /** Toques da cadência de recuperação (WhatsApp automático) já enviados. */
+  recoveryTouches?: Array<{
+    step: number;
+    status: string; // "sent" | "error"
+    sentAt: Date | string;
+    templateKey: string;
+    message: string;
+  }>;
 };
 
 type StatusStyle = { label: string; color: string; bg: string };
@@ -198,12 +206,13 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
               <th className="text-left px-4 py-2">Origem</th>
               <th className="text-right px-4 py-2">Valor</th>
               <th className="text-left px-4 py-2">Status</th>
+              <th className="text-left px-4 py-2">Recuperação</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center px-4 py-6" style={{ color: "var(--fg2)" }}>
+                <td colSpan={8} className="text-center px-4 py-6" style={{ color: "var(--fg2)" }}>
                   Nenhum lead Engaged ou WhatsApp em status pré-venda. Compras pagas ficam no bloco
                   de Vendas acima.
                 </td>
@@ -317,6 +326,37 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
                       >
                         {s.label}
                       </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {r.recoveryTouches && r.recoveryTouches.length > 0 ? (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {[...r.recoveryTouches]
+                            .sort((a, b) => a.step - b.step)
+                            .map((t) => {
+                              const ok = t.status === "sent";
+                              return (
+                                <span
+                                  key={t.step}
+                                  title={`WhatsApp ${ok ? "enviado" : "FALHOU"} em ${formatDate(t.sentAt)} (${t.templateKey})\n\n${t.message}`}
+                                  style={{
+                                    fontSize: 9,
+                                    fontWeight: 800,
+                                    padding: "2px 6px",
+                                    borderRadius: 3,
+                                    background: ok ? "rgba(37,211,102,0.15)" : "rgba(236,96,136,0.15)",
+                                    color: ok ? "#25D366" : "#EC6088",
+                                    whiteSpace: "nowrap",
+                                    cursor: "help",
+                                  }}
+                                >
+                                  {ok ? "✓" : "✗"} WA {t.step} · {formatDate(t.sentAt)}
+                                </span>
+                              );
+                            })}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 10, color: "var(--fg2)" }}>—</span>
+                      )}
                     </td>
                   </tr>
                 );
