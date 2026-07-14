@@ -35,8 +35,10 @@ export function chatproConfigured(): boolean {
 
 async function post(endpoint: string, body: Record<string, unknown>): Promise<{ ok: boolean; json: Record<string, unknown> | null; error?: string }> {
   const c = cfg();
+  // endpoint absoluto (http...) usa como está; relativo prefixa o baseUrl (sparks)
+  const url = endpoint.startsWith("http") ? endpoint : `${c.baseUrl}${endpoint}`;
   try {
-    const res = await fetch(`${c.baseUrl}${endpoint}`, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "instance-token": c.token, "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -104,11 +106,13 @@ export async function sendWhatsAppText(phone: string, message: string): Promise<
  * Envia um TEMPLATE aprovado (Meta/HSM) — obrigatório pra mensagem proativa
  * em número oficial fora da janela de 24h.
  *
- * Endpoint confirmado com o suporte ChatPro + doc (chatpro.readme.io):
- *   POST /waba/sendTemplate  { instanceId, number, name, languageCode, variables }
- * Vai direto no número (sem sessão) e NÃO aceita `provider`/`components`/
- * `params` (validador rejeita) — o campo de variáveis do body é `variables`.
- * Override do endpoint via CHATPRO_TEMPLATE_ENDPOINT se o ChatPro mudar.
+ * Formato confirmado pelo cURL do painel ChatPro (Configurações →
+ * Mensagens modelo → Código para disparo) + validação do endpoint:
+ *   POST https://chat-api.chatpro.com.br/messages/sendTemplate
+ *   { instanceId, number, provider: "cloud", name, languageCode,
+ *     variables: [{ type: "text", text: "<valor>" }, ...] }
+ * Vai direto no número (sem sessão). `variables` na ordem dos {{1}},{{2}}…
+ * Override da URL via CHATPRO_TEMPLATE_URL se o ChatPro mudar.
  */
 export async function sendWhatsAppTemplate(
   phone: string,
@@ -121,13 +125,17 @@ export async function sendWhatsAppTemplate(
   if (number.length < 10) return { ok: false, error: `telefone_invalido: ${phone}` };
 
   const c = cfg();
-  const endpoint = process.env.CHATPRO_TEMPLATE_ENDPOINT || "/waba/sendTemplate";
-  const r = await post(endpoint, {
+  const url =
+    process.env.CHATPRO_TEMPLATE_URL || "https://chat-api.chatpro.com.br/messages/sendTemplate";
+  const r = await post(url, {
     instanceId: c.instanceId,
     number,
+    provider: c.provider,
     name: templateName,
     languageCode,
-    ...(params.length > 0 ? { variables: params } : {}),
+    ...(params.length > 0
+      ? { variables: params.map((v) => ({ type: "text", text: v })) }
+      : {}),
   });
   if (!r.ok) return { ok: false, error: r.error, raw: r.json };
   return { ok: true, raw: r.json };
