@@ -37,7 +37,7 @@ export default async function AdminPage() {
   }
 
   // Contadores rapidos pros cards
-  const [campaignsCount, activeCampaigns, allowedEmails, allowedDomains, trackedActive, openRecs, channelGroups] = await Promise.all([
+  const [campaignsCount, activeCampaigns, allowedEmails, allowedDomains, trackedActive, openRecs, channelGroups, recoveryTouches] = await Promise.all([
     prisma.campaign.count(),
     prisma.campaign.count({ where: { isActive: true } }),
     prisma.allowedEmail.count(),
@@ -45,6 +45,7 @@ export default async function AdminPage() {
     prisma.trackedCampaign.count({ where: { active: true } }),
     prisma.agentRecommendation.count({ where: { status: "OPEN" } }),
     prisma.channelGroup.count().catch(() => 0),
+    prisma.recoveryTouch.count({ where: { status: "sent" } }).catch(() => 0),
   ]);
 
   return (
@@ -128,6 +129,12 @@ export default async function AdminPage() {
             title="Grupos de canal"
             subtitle={`${channelGroups} grupo${channelGroups === 1 ? "" : "s"}`}
             description="Regra global Orgânico/Meta/Google/Mailing/Portal por utm_source/medium. Agrupa a tabela 'Por fonte (UTM)' do cockpit."
+          />
+          <AdminCard
+            href="/admin/recovery"
+            title="Recuperação (WhatsApp)"
+            subtitle={`${recoveryTouches} toque${recoveryTouches === 1 ? "" : "s"} enviado${recoveryTouches === 1 ? "" : "s"}`}
+            description="Templates da cadência de checkout abandonado (30min/24h/72h): texto, template ChatPro/Meta e parâmetros de cada passo."
           />
         </div>
 

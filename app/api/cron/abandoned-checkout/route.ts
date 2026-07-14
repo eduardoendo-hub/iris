@@ -24,15 +24,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getProductConfig } from "@/lib/products";
-import { sendWhatsAppText, chatproConfigured, normalizeWaNumber } from "@/lib/chatpro";
+import { sendWhatsAppText, sendWhatsAppTemplate, chatproConfigured, normalizeWaNumber } from "@/lib/chatpro";
 import {
   RECOVERY_STEPS,
   MAX_STEPS,
   RECOVERABLE_STATUSES,
+  DEFAULT_TEMPLATE_TEXTS,
   pickTemplate,
   firstName,
   buildRecoveryLink,
-  renderTemplate,
+  renderText,
+  paramValue,
+  type TemplateVars,
 } from "@/lib/recovery";
 
 export const runtime = "nodejs";
@@ -59,6 +62,10 @@ type Planned = {
   step: number;
   templateKey: string;
   message: string;
+  /** Template aprovado no ChatPro/Meta (config /admin/recovery). Null = texto livre. */
+  chatproTemplate: string | null;
+  /** Valores dos parâmetros {{1}},{{2}},... na ordem configurada. */
+  tplParams: string[];
 };
 
 export async function GET(req: NextRequest) {
@@ -87,6 +94,22 @@ export async function GET(req: NextRequest) {
     },
   });
   const byProduct = new Map(campaigns.map((c) => [c.productSlug, c]));
+
+  // Config editável dos templates (/admin/recovery). Sem linha no DB = default.
+  const templateCfg = new Map<
+    string,
+    { chatproTemplate: string | null; params: string[]; fallbackText: string | null; active: boolean }
+  >();
+  try {
+    for (const t of await prisma.recoveryTemplate.findMany()) {
+      templateCfg.set(t.key, {
+        chatproTemplate: t.chatproTemplate,
+        params: t.params,
+        fallbackText: t.fallbackText,
+        active: t.active,
+      });
+    }
+  } catch { /* tabela ainda não migrada — usa defaults */ }
 
   const planned: Planned[] = [];
   const skipped: Record<string, number> = {};
@@ -163,6 +186,9 @@ export async function GET(req: NextRequest) {
       if (lastTouch && now - lastTouch.sentAt.getTime() < gapH * 3600_000) { skip("gap_minimo"); continue; }
 
       const templateKey = pickTemplate(nextStep, lead.status, !!voucher);
+      const cfg = templateCfg.get(templateKey);
+      if (cfg && !cfg.active) { skip("template_inativo"); continue; }
+
       const link = buildRecoveryLink({
         sharedId,
         turmaId: campaign.impactaTurmaId,
@@ -170,12 +196,20 @@ export async function GET(req: NextRequest) {
         step: nextStep,
         voucherCode: voucher,
       });
-      const message = renderTemplate(templateKey, {
+      const vars: TemplateVars = {
         nome: firstName(lead.customerName),
         curso: courseName,
         link,
         cupom: voucher || undefined,
-      });
+      };
+      const message = renderText(
+        cfg?.fallbackText || DEFAULT_TEMPLATE_TEXTS[templateKey],
+        vars
+      );
+      const chatproTemplate = cfg?.chatproTemplate ?? null;
+      const tplParams = chatproTemplate
+        ? (cfg?.params ?? []).map((p) => paramValue(p, vars))
+        : [];
 
       planned.push({
         engagedPurchaseId: lead.id,
@@ -187,6 +221,8 @@ export async function GET(req: NextRequest) {
         step: nextStep,
         templateKey,
         message,
+        chatproTemplate,
+        tplParams,
       });
     }
   }
@@ -201,7 +237,11 @@ export async function GET(req: NextRequest) {
 
   if (sendEnabled) {
     for (const p of toSend) {
-      const r = await sendWhatsAppText(p.phone, p.message);
+      // Template aprovado (número oficial, proativo) quando configurado
+      // em /admin/recovery; senão texto livre (só entrega com janela aberta).
+      const r = p.chatproTemplate
+        ? await sendWhatsAppTemplate(p.phone, p.chatproTemplate, p.tplParams)
+        : await sendWhatsAppText(p.phone, p.message);
       try {
         await prisma.recoveryTouch.create({
           data: {
@@ -210,7 +250,8 @@ export async function GET(req: NextRequest) {
             campaignSlug: p.campaignSlug,
             channel: "whatsapp",
             step: p.step,
-            templateKey: p.templateKey,
+            // "step1_draft@recuperacao_1" = enviado via template Meta
+            templateKey: p.chatproTemplate ? `${p.templateKey}@${p.chatproTemplate}` : p.templateKey,
             message: p.message,
             phone: p.phone,
             status: r.ok ? "sent" : "error",
@@ -221,7 +262,7 @@ export async function GET(req: NextRequest) {
         // unique violation (corrida entre execuções) — considera já tocado
       }
       if (r.ok) sent++; else errors++;
-      results.push({ name: p.customerName, phone: p.phone, step: p.step, ok: r.ok, error: r.error });
+      results.push({ name: p.customerName, phone: p.phone, step: p.step, viaTemplate: p.chatproTemplate, ok: r.ok, error: r.error });
     }
   }
 
@@ -242,6 +283,7 @@ export async function GET(req: NextRequest) {
           status: p.status,
           step: p.step,
           template: p.templateKey,
+          viaTemplate: p.chatproTemplate,
           message: p.message,
         })),
   });

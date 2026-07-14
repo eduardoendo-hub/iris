@@ -99,3 +99,43 @@ export async function sendWhatsAppText(phone: string, message: string): Promise<
   if (!r.ok) return { ok: false, error: r.error, raw: r.json };
   return { ok: true, raw: r.json };
 }
+
+/**
+ * Envia um TEMPLATE aprovado (Meta/HSM) — obrigatório pra mensagem proativa
+ * em número oficial fora da janela de 24h.
+ *
+ * O endpoint exato do sparks ainda não foi confirmado pelo ChatPro — por
+ * isso é configurável via env CHATPRO_TEMPLATE_ENDPOINT (default
+ * /messages/sendTemplate). Se retornar 404, o erro instrui a confirmar o
+ * endpoint com o suporte do ChatPro; o toque fica status="error" (visível
+ * na coluna Recuperação do cockpit), nada é perdido silenciosamente.
+ */
+export async function sendWhatsAppTemplate(
+  phone: string,
+  templateName: string,
+  params: string[]
+): Promise<ChatProResult> {
+  if (!chatproConfigured()) return { ok: false, error: "chatpro_not_configured" };
+  const number = normalizeWaNumber(phone);
+  if (number.length < 10) return { ok: false, error: `telefone_invalido: ${phone}` };
+
+  const session = await getOrCreateSession(number);
+  if (!session.sessionId) return { ok: false, error: session.error || "no_session" };
+
+  const c = cfg();
+  const endpoint = process.env.CHATPRO_TEMPLATE_ENDPOINT || "/messages/sendTemplate";
+  const r = await post(endpoint, {
+    instanceId: c.instanceId,
+    sessionId: session.sessionId,
+    provider: c.provider,
+    templateName,
+    params,
+  });
+  if (!r.ok) {
+    const hint = (r.error || "").includes("404")
+      ? ` — endpoint de template não confirmado; verifique com o suporte ChatPro e ajuste CHATPRO_TEMPLATE_ENDPOINT`
+      : "";
+    return { ok: false, error: `${r.error}${hint}`, raw: r.json };
+  }
+  return { ok: true, raw: r.json };
+}

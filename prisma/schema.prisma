@@ -736,6 +736,30 @@ model RecoveryTouch {
   @@index([productSlug, sentAt])
 }
 
+// ============================================================
+// RECOVERY TEMPLATE — config editável (via /admin/recovery) de cada
+// mensagem da cadência de recuperação.
+// ============================================================
+// key = chave interna do passo (step1_draft, step2_refused, ...).
+// chatproTemplate = nome do template APROVADO no ChatPro/Meta (número
+//   oficial só aceita template fora da janela de 24h). Se vazio, o cron
+//   envia texto livre (fallbackText) — só funciona com janela aberta ou
+//   instância não-oficial.
+// params = ordem dos parâmetros do template Meta ({{1}},{{2}},...) em
+//   termos das variáveis internas: "nome" | "curso" | "link" | "cupom".
+// fallbackText = texto da mensagem (editável na tela) — usado no envio
+//   livre e como preview/auditoria. Default = lib/recovery.ts.
+model RecoveryTemplate {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  chatproTemplate String?
+  params          String[] @default([])
+  fallbackText    String?  @db.Text
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 // Grupo de canal de negócio (Orgânico, Meta, Google, Mailing, Portal, ...) —
 // classifica o tráfego da LP por utm_source/utm_medium. Regra GLOBAL (vale pra
 // todas as campanhas), editável via /admin/channel-groups. Usado pra agrupar a

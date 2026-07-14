@@ -29,7 +29,7 @@ export const RECOVERABLE_STATUSES = ["DRAFT", "WAITING_PAYMENT", "REFUSED", "EXP
 
 // ─── Templates ─────────────────────────────────────────────────────────
 
-const T = {
+export const DEFAULT_TEMPLATE_TEXTS = {
   // ── Passo 1 (30 min) — contextual por status ──
   step1_draft:
     "Oi {nome}! 👋 Aqui é da Impacta. Vi que você começou sua inscrição no {curso} e faltou só o pagamento. Ficou alguma dúvida sobre o curso? Me chama que eu te ajudo! Seu link pra finalizar: {link}",
@@ -53,13 +53,27 @@ const T = {
     "{nome}, última chamada! A turma do {curso} começa em breve e essa é minha última mensagem por aqui 🙂 Se quiser garantir sua vaga: {link}\n\nSe ficou alguma dúvida ou dificuldade, me responde que eu te ajudo pessoalmente.",
 } as const;
 
-export type TemplateKey = keyof typeof T;
+export type TemplateKey = keyof typeof DEFAULT_TEMPLATE_TEXTS;
+
+export const TEMPLATE_KEYS = Object.keys(DEFAULT_TEMPLATE_TEXTS) as TemplateKey[];
+
+/** Metadados por chave pra tela /admin/recovery (rótulo + params default). */
+export const TEMPLATE_META: Record<TemplateKey, { label: string; defaultParams: string[] }> = {
+  step1_draft:           { label: "Passo 1 · 30min · Lead capturado",     defaultParams: ["nome", "curso", "link"] },
+  step1_waiting_payment: { label: "Passo 1 · 30min · Aguardando pagto",   defaultParams: ["nome", "curso", "link"] },
+  step1_refused:         { label: "Passo 1 · 30min · Cartão recusado",    defaultParams: ["nome", "curso", "link"] },
+  step1_expired:         { label: "Passo 1 · 30min · Pagamento expirado", defaultParams: ["nome", "curso", "link"] },
+  step2_default:         { label: "Passo 2 · 24h · Lembrete",             defaultParams: ["nome", "curso", "link"] },
+  step2_refused:         { label: "Passo 2 · 24h · Cartão recusado",      defaultParams: ["nome", "curso", "link"] },
+  step3_com_cupom:       { label: "Passo 3 · 72h · Última chamada (cupom)", defaultParams: ["nome", "curso", "cupom", "link"] },
+  step3_sem_cupom:       { label: "Passo 3 · 72h · Última chamada",       defaultParams: ["nome", "curso", "link"] },
+};
 
 /** Escolhe o template pra (step, status). */
 export function pickTemplate(step: number, status: string, hasCoupon: boolean): TemplateKey {
   if (step === 1) {
     const key = `step1_${status.toLowerCase()}` as TemplateKey;
-    return key in T ? key : "step1_draft";
+    return key in DEFAULT_TEMPLATE_TEXTS ? key : "step1_draft";
   }
   if (step === 2) return status === "REFUSED" ? "step2_refused" : "step2_default";
   return hasCoupon ? "step3_com_cupom" : "step3_sem_cupom";
@@ -94,12 +108,11 @@ export function buildRecoveryLink(opts: {
   return url.toString();
 }
 
-/** Renderiza o template com as variáveis. */
-export function renderTemplate(
-  key: TemplateKey,
-  vars: { nome: string; curso: string; link: string; cupom?: string }
-): string {
-  let msg: string = T[key];
+export type TemplateVars = { nome: string; curso: string; link: string; cupom?: string };
+
+/** Renderiza um texto de template (default ou editado na tela ADM). */
+export function renderText(text: string, vars: TemplateVars): string {
+  let msg = text;
   // Sem nome: tira o "{nome}, " / "Oi {nome}!" fica "Oi!" — trata os dois casos
   if (!vars.nome) {
     msg = msg
@@ -113,4 +126,20 @@ export function renderTemplate(
     .replace(/\{link\}/g, vars.link)
     .replace(/\{cupom\}/g, vars.cupom || "")
     .trim();
+}
+
+/** Renderiza pela chave, com texto default (compat). */
+export function renderTemplate(key: TemplateKey, vars: TemplateVars): string {
+  return renderText(DEFAULT_TEMPLATE_TEXTS[key], vars);
+}
+
+/** Resolve o valor de um parâmetro de template Meta ({{n}}) pela variável interna. */
+export function paramValue(name: string, vars: TemplateVars): string {
+  switch (name.trim().toLowerCase()) {
+    case "nome":  return vars.nome || "aluno(a)";
+    case "curso": return vars.curso;
+    case "link":  return vars.link;
+    case "cupom": return vars.cupom || "";
+    default:      return "";
+  }
 }
