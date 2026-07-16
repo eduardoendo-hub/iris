@@ -189,14 +189,26 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const a = await checkAdminAuth(req);
   if (!a.authorized) return NextResponse.json({ error: "unauthorized", reason: a.reason }, { status: 401 });
   const { id } = await ctx.params;
-  const r = await runReconcile(id, true);
-  return NextResponse.json(r.body, { status: r.statusCode });
+  try {
+    const r = await runReconcile(id, true);
+    return NextResponse.json(r.body, { status: r.statusCode });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[reconcile GET] falhou", { campaignId: id, message, err });
+    return NextResponse.json({ error: "reconcile_failed", message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const a = await checkAdminAuth(req);
   if (!a.authorized) return NextResponse.json({ error: "unauthorized", reason: a.reason }, { status: 401 });
   const { id } = await ctx.params;
-  const r = await runReconcile(id, false);
-  return NextResponse.json(r.body, { status: r.statusCode });
+  try {
+    const r = await runReconcile(id, false);
+    return NextResponse.json(r.body, { status: r.statusCode });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[reconcile POST] falhou", { campaignId: id, message, err });
+    return NextResponse.json({ error: "reconcile_failed", message }, { status: 500 });
+  }
 }
