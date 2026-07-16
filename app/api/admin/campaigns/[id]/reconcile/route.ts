@@ -55,9 +55,24 @@ async function runReconcile(campaignId: string, dryRun: boolean) {
 
   const fetched = await fetchImpactaTurma(campaign.impactaTurmaId);
   if (!fetched.ok) {
+    // Traduz o erro técnico (http_500, timeout, unexpected_shape) numa mensagem
+    // que deixa claro que a falha é NA API da Impacta, não no IRIS — o painel
+    // exibe body.message. http_5xx = servidor da Impacta caiu pra essa turma.
+    const raw = fetched.error || "unknown";
+    const m = /^http_(\d{3})$/.exec(raw);
+    let message: string;
+    if (m && Number(m[1]) >= 500) {
+      message = `A API de matrículas da Impacta retornou HTTP ${m[1]} (Server Error) para a turma ${campaign.impactaTurmaId}. É uma falha no servidor da Impacta (apiv2.impacta.com.br), não no IRIS — peça ao time de TI da Impacta pra verificar essa turma.`;
+    } else if (m) {
+      message = `A API de matrículas da Impacta retornou HTTP ${m[1]} para a turma ${campaign.impactaTurmaId}. Confira se o nº da turma está correto.`;
+    } else if (raw.toLowerCase().includes("timeout") || raw.toLowerCase().includes("abort")) {
+      message = `A API de matrículas da Impacta não respondeu a tempo (timeout) para a turma ${campaign.impactaTurmaId}. Tente de novo em instantes; se persistir, é lentidão no servidor da Impacta.`;
+    } else {
+      message = `Não foi possível conciliar: a API de matrículas da Impacta falhou (${raw}) para a turma ${campaign.impactaTurmaId}.`;
+    }
     return {
       statusCode: 502 as const,
-      body: { error: "impacta_api_failed", detail: fetched.error, turmaId: campaign.impactaTurmaId },
+      body: { error: "impacta_api_failed", detail: raw, turmaId: campaign.impactaTurmaId, message },
     };
   }
   const paid = fetched.enrollments.filter(isPaidEnrollment);
