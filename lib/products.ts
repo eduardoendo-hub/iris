@@ -157,6 +157,28 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // (ou painel Engaged) apos a primeira venda — fallback de atribuicao.
   },
 
+  "logica": {
+    slug: "logica",
+    name: "Lógica de Programação",
+    // LP servida em impacta.com.br/cursos/logica/ (dominio publico da Impacta,
+    // ja na whitelist de CORS do /api/events). Curso de 40h ao vivo, Python,
+    // do zero — parceria Olhar Digital. PRIMEIRA LP MULTI-TURMA: a mesma
+    // pagina vende Presencial (inicio 14/09/2026) e Online ao vivo (01/09/2026),
+    // cada uma com seu checkout. O de-para sharedId->turma vive na
+    // CampaignTurma da campanha; aqui vao TODOS os sharedIds (filtro de
+    // produto do webhook).
+    lpUrl: "https://impacta.com.br/cursos/logica/",
+    // Convencao esperada nas campanhas Meta/Google: nome contendo "LOGICA"
+    // (ex.: "M1-PROSP-LOGICA-SET26", "G1-SEARCH-LOGICA-SET26").
+    metaCampaignFilter: "LOGICA",
+    googleCampaignFilter: "LOGICA",
+    campaignSlug: "logica-setembro-2026",
+    // Engaged checkout SharedIDs — presencial + online:
+    //   https://impacta.site.engaged.com.br/p/checkout/se22shhnov  (Presencial)
+    //   https://impacta.site.engaged.com.br/p/checkout/3je9srypg3  (Online ao vivo)
+    engagedCheckoutSharedIds: ["se22shhnov", "3je9srypg3"],
+  },
+
   "corporativo": {
     slug: "corporativo",
     name: "Corporativo",
