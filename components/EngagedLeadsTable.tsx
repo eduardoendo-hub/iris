@@ -16,6 +16,8 @@ type Row = {
   /** Tipo da fonte: engaged (checkout iniciou), whatsapp (clicou/preencheu
    *  barreira do WA), form (formulário "falar com consultor"). */
   kind?: "engaged" | "whatsapp" | "form";
+  /** Turma paralela da campanha (CampaignTurma.key) — null = campanha simples. */
+  turmaKey?: string | null;
   externalId: string;
   status: string;
   lastEventType: string;
@@ -121,7 +123,19 @@ function formatBRL(n: number | null): string {
   }).format(n);
 }
 
-export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCount: number }) {
+/** Mapa turmaKey → rótulo/cor (turmas paralelas da campanha). */
+type TurmaBadgeMap = Record<string, { label: string; color: string | null }>;
+
+export function EngagedLeadsTable({
+  rows,
+  totalCount,
+  turmaMap,
+}: {
+  rows: Row[];
+  totalCount: number;
+  /** Presente quando a campanha tem turmas paralelas — liga o selo por lead. */
+  turmaMap?: TurmaBadgeMap;
+}) {
   // Ordena: status mais quente primeiro, depois eventAt desc (evento mais recente)
   const sorted = [...rows].sort((a, b) => {
     const pa = statusPriority(a.status);
@@ -265,9 +279,33 @@ export function EngagedLeadsTable({ rows, totalCount }: { rows: Row[]; totalCoun
                       className="px-4 py-2.5"
                       style={{ color: "var(--fg1)", fontWeight: 600 }}
                     >
-                      {r.customerName || (
-                        <span style={{ color: "var(--fg2)" }}>—</span>
-                      )}
+                      <span className="inline-flex items-center gap-2 flex-wrap">
+                        {r.customerName || (
+                          <span style={{ color: "var(--fg2)" }}>—</span>
+                        )}
+                        {(() => {
+                          const t = r.turmaKey ? turmaMap?.[r.turmaKey] : null;
+                          if (!t) return null;
+                          const c = t.color ?? "#9ABABA";
+                          return (
+                            <span
+                              style={{
+                                fontSize: 9,
+                                fontWeight: 800,
+                                padding: "1px 7px",
+                                borderRadius: 4,
+                                background: `${c}26`,
+                                color: c,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {t.label}
+                            </span>
+                          );
+                        })()}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5" style={{ color: "var(--fg1)", fontSize: 12 }}>
                       {r.customerEmail && <div>{r.customerEmail}</div>}

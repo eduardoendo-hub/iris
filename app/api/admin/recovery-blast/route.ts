@@ -61,14 +61,20 @@ export async function POST(req: NextRequest) {
   // Campanha ativa do produto (dá o checkout + turma pro link)
   const campaign = await prisma.campaign.findFirst({
     where: { productSlug, status: "ACTIVE" },
+    include: { turmas: { orderBy: { ordem: "asc" } } },
   });
   if (!campaign) {
     return NextResponse.json({ error: "no_active_campaign", productSlug }, { status: 400 });
   }
-  const sharedId = campaign.engagedCheckoutSharedIds[0];
+  // Fallback (campanha simples ou candidato sem turma): 1º sharedId da
+  // campanha, senão o 1º de qualquer turma paralela cadastrada.
+  const sharedId =
+    campaign.engagedCheckoutSharedIds[0] ??
+    campaign.turmas.flatMap((t) => t.engagedSharedIds)[0];
   if (!sharedId) {
     return NextResponse.json({ error: "campaign_sem_checkout_engaged" }, { status: 400 });
   }
+  const turmaByKey = new Map(campaign.turmas.map((t) => [t.key, t]));
   const voucher = process.env.RECOVERY_VOUCHER_CODE || null;
   if (!voucher) {
     return NextResponse.json({ error: "RECOVERY_VOUCHER_CODE_nao_configurado" }, { status: 400 });
@@ -90,7 +96,7 @@ export async function POST(req: NextRequest) {
   const [engaged, leads, paidEngaged, sales, priorTouches] = await Promise.all([
     prisma.engagedPurchase.findMany({
       where: { productSlug, status: { not: "PAID" } },
-      select: { id: true, customerName: true, customerEmail: true, customerPhone: true, status: true },
+      select: { id: true, customerName: true, customerEmail: true, customerPhone: true, status: true, turmaKey: true },
     }),
     prisma.lead.findMany({
       where: { productSlug, phone: { not: null } },
@@ -120,15 +126,15 @@ export async function POST(req: NextRequest) {
   const alreadyBlasted = new Set(priorTouches.map((t) => t.engagedPurchaseId));
 
   // Unifica candidatos (Engaged primeiro — status mais rico), dedup por telefone
-  type Cand = { refId: string; source: string; name: string | null; email: string | null; phone: string };
+  type Cand = { refId: string; source: string; name: string | null; email: string | null; phone: string; turmaKey: string | null };
   const seenPhones = new Set<string>();
   const candidates: Cand[] = [];
   const skipped: Record<string, number> = {};
   const skip = (r: string) => (skipped[r] = (skipped[r] ?? 0) + 1);
 
-  const pool: Array<{ refId: string; source: string; name: string | null; email: string | null; rawPhone: string | null }> = [
-    ...engaged.map((e) => ({ refId: e.id, source: `engaged:${e.status}`, name: e.customerName, email: e.customerEmail, rawPhone: e.customerPhone })),
-    ...leads.map((l) => ({ refId: l.id, source: `lead:${l.eventType}`, name: l.name, email: l.email, rawPhone: l.phone })),
+  const pool: Array<{ refId: string; source: string; name: string | null; email: string | null; rawPhone: string | null; turmaKey: string | null }> = [
+    ...engaged.map((e) => ({ refId: e.id, source: `engaged:${e.status}`, name: e.customerName, email: e.customerEmail, rawPhone: e.customerPhone, turmaKey: e.turmaKey })),
+    ...leads.map((l) => ({ refId: l.id, source: `lead:${l.eventType}`, name: l.name, email: l.email, rawPhone: l.phone, turmaKey: null })),
   ];
 
   for (const c of pool) {
@@ -141,25 +147,27 @@ export async function POST(req: NextRequest) {
     if (paidPhones.has(tail)) { skip("ja_pagou"); continue; }
     if (alreadyBlasted.has(c.refId)) { skip("ja_recebeu_blast"); continue; }
     seenPhones.add(tail);
-    candidates.push({ refId: c.refId, source: c.source, name: c.name, email: c.email, phone: normalizeWaNumber(c.rawPhone!) });
+    candidates.push({ refId: c.refId, source: c.source, name: c.name, email: c.email, phone: normalizeWaNumber(c.rawPhone!), turmaKey: c.turmaKey });
   }
 
   const toSend = candidates.slice(0, maxSends);
   const overflow = candidates.length - toSend.length;
-
-  const link = buildRecoveryLink({
-    sharedId,
-    turmaId: campaign.impactaTurmaId,
-    campaignSlug: campaign.slug,
-    step: 3,
-    voucherCode: voucher,
-  });
 
   let sent = 0;
   let errors = 0;
   const results: Array<Record<string, unknown>> = [];
 
   for (const c of toSend) {
+    // Link por candidato: aponta pro checkout da TURMA que ele abandonou
+    // (presencial vs online). Sem turma → fallback da campanha.
+    const candTurma = c.turmaKey ? turmaByKey.get(c.turmaKey) : undefined;
+    const link = buildRecoveryLink({
+      sharedId: candTurma?.engagedSharedIds[0] ?? sharedId,
+      turmaId: candTurma?.impactaTurmaId ?? campaign.impactaTurmaId,
+      campaignSlug: campaign.slug,
+      step: 3,
+      voucherCode: voucher,
+    });
     const vars: TemplateVars = { nome: firstName(c.name), curso: courseName, link, cupom: voucher };
     const message = renderText(tplCfg?.fallbackText || DEFAULT_TEMPLATE_TEXTS.step3_com_cupom, vars);
     if (dryRun) {
@@ -203,7 +211,15 @@ export async function POST(req: NextRequest) {
     enviados: sent,
     erros: errors,
     skipped,
-    linkUsado: link,
+    // Link agora é por candidato (turma do abandono) — mostra o fallback
+    // da campanha como referência.
+    linkFallback: buildRecoveryLink({
+      sharedId,
+      turmaId: campaign.impactaTurmaId,
+      campaignSlug: campaign.slug,
+      step: 3,
+      voucherCode: voucher,
+    }),
     preview: results,
   });
 }

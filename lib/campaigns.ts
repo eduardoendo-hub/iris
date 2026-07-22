@@ -137,6 +137,53 @@ export async function getCampaignByTurmaId(turmaId: string) {
   }
 }
 
+// ────────────────────────────────────────────────────────────────
+// TURMAS PARALELAS (CampaignTurma) — campanha/LP com N turmas ao
+// mesmo tempo (presencial + online, etc). Os resolvers abaixo têm
+// precedência sobre os legados: se o sharedId/turmaId estiver numa
+// CampaignTurma, devolvem {campaign, turma} e o chamador carimba
+// turmaKey; senão o chamador cai no resolver legado (campanha simples).
+// ────────────────────────────────────────────────────────────────
+
+export type TurmaMatch = {
+  campaign: NonNullable<Awaited<ReturnType<typeof getActiveCampaign>>>;
+  turma: { id: string; key: string; label: string; color: string | null; impactaTurmaId: string | null; engagedSharedIds: string[] };
+};
+
+/** Resolve {campanha, turma} pelo sharedId do checkout Engaged. */
+export async function getTurmaBySharedId(sharedId: string): Promise<TurmaMatch | null> {
+  if (!sharedId) return null;
+  try {
+    const t = await prisma.campaignTurma.findFirst({
+      where: { engagedSharedIds: { has: sharedId } },
+      include: { campaign: true },
+      orderBy: { campaign: { isActive: "desc" } },
+    });
+    if (!t) return null;
+    const { campaign, ...turma } = t;
+    return { campaign, turma };
+  } catch {
+    return null; // tabela ainda não migrada — chamador cai no legado
+  }
+}
+
+/** Resolve {campanha, turma} pelo ID da turma no Simpac (?turma=<id>). */
+export async function getTurmaByImpactaTurmaId(turmaId: string): Promise<TurmaMatch | null> {
+  if (!turmaId) return null;
+  try {
+    const t = await prisma.campaignTurma.findFirst({
+      where: { impactaTurmaId: turmaId },
+      include: { campaign: true },
+      orderBy: { campaign: { isActive: "desc" } },
+    });
+    if (!t) return null;
+    const { campaign, ...turma } = t;
+    return { campaign, turma };
+  } catch {
+    return null;
+  }
+}
+
 /** Metas/alvos de uma campanha, normalizados pro agente de insight. */
 export type InsightCampaignGoals = {
   matriculas: number;

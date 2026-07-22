@@ -7,6 +7,8 @@ import { CartIcon, ConsultorIcon, PencilIcon, TrashIcon } from "./icons";
 type SaleRow = {
   id: string;
   source: string;
+  /** Turma paralela da campanha (CampaignTurma.key) — null = campanha simples. */
+  turmaKey?: string | null;
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
@@ -89,16 +91,22 @@ const SOURCE_META: Record<
   OTHER:     { label: "Outro",     color: "#9ABABA", bg: "rgba(154,186,186,0.15)", icon: null },
 };
 
+/** Mapa turmaKey → rótulo/cor (turmas paralelas da campanha). */
+export type TurmaBadgeMap = Record<string, { label: string; color: string | null }>;
+
 export function SalesTable({
   productSlug,
   sales,
   totalCount,
   totalAmount,
+  turmaMap,
 }: {
   productSlug: string;
   sales: SaleRow[];
   totalCount: number;
   totalAmount: number;
+  /** Presente quando a campanha tem turmas paralelas — liga o selo por venda. */
+  turmaMap?: TurmaBadgeMap;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<SaleRow | null>(null);
@@ -252,7 +260,33 @@ export function SalesTable({
                         {formatDate(s.saleDate)}
                       </td>
                       <td style={{ padding: "12px 16px", color: "var(--fg1)", fontWeight: 600 }}>
-                        {s.customerName}
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {s.customerName}
+                          {(() => {
+                            // Selo da turma (presencial/online) — só quando a
+                            // campanha tem turmas paralelas e a venda é carimbada.
+                            const t = s.turmaKey ? turmaMap?.[s.turmaKey] : null;
+                            if (!t) return null;
+                            const c = t.color ?? "#9ABABA";
+                            return (
+                              <span
+                                style={{
+                                  fontSize: 9,
+                                  fontWeight: 800,
+                                  padding: "1px 7px",
+                                  borderRadius: 4,
+                                  background: `${c}26`,
+                                  color: c,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {t.label}
+                              </span>
+                            );
+                          })()}
+                        </span>
                         {s.notes && (
                           <div style={{ fontSize: 10, color: "var(--fg2)", fontWeight: 400, marginTop: 2 }}>
                             {s.notes.slice(0, 80)}

@@ -91,6 +91,12 @@ export async function GET(req: NextRequest) {
       startDate: true,
       impactaTurmaId: true,
       engagedCheckoutSharedIds: true,
+      // Turmas paralelas: o link de recuperação deve apontar pro checkout da
+      // turma que o lead abandonou (não pro primeiro sharedId da campanha).
+      turmas: {
+        orderBy: { ordem: "asc" },
+        select: { key: true, engagedSharedIds: true, impactaTurmaId: true },
+      },
     },
   });
   const byProduct = new Map(campaigns.map((c) => [c.productSlug, c]));
@@ -116,8 +122,13 @@ export async function GET(req: NextRequest) {
   const skip = (reason: string) => (skipped[reason] = (skipped[reason] ?? 0) + 1);
 
   for (const campaign of campaigns) {
-    const sharedId = campaign.engagedCheckoutSharedIds[0];
-    if (!sharedId) continue; // sem checkout Engaged — nada a recuperar
+    // Fallback (campanha simples ou lead sem turma): 1º sharedId da campanha,
+    // senão o 1º de qualquer turma cadastrada.
+    const fallbackSharedId =
+      campaign.engagedCheckoutSharedIds[0] ??
+      campaign.turmas.flatMap((t) => t.engagedSharedIds)[0];
+    if (!fallbackSharedId) continue; // sem checkout Engaged — nada a recuperar
+    const turmaByKey = new Map(campaign.turmas.map((t) => [t.key, t]));
     const productSlug = campaign.productSlug;
     const product = getProductConfig(productSlug);
     const courseName = product?.name || productSlug;
@@ -190,9 +201,12 @@ export async function GET(req: NextRequest) {
       const cfg = templateCfg.get(templateKey);
       if (cfg && !cfg.active) { skip("template_inativo"); continue; }
 
+      // Checkout da TURMA que o lead abandonou (presencial vs online) —
+      // sem isso, todo mundo cairia no checkout da primeira turma.
+      const leadTurma = lead.turmaKey ? turmaByKey.get(lead.turmaKey) : undefined;
       const link = buildRecoveryLink({
-        sharedId,
-        turmaId: campaign.impactaTurmaId,
+        sharedId: leadTurma?.engagedSharedIds[0] ?? fallbackSharedId,
+        turmaId: leadTurma?.impactaTurmaId ?? campaign.impactaTurmaId,
         campaignSlug: campaign.slug,
         step: nextStep,
         voucherCode: voucher,

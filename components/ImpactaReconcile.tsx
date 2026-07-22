@@ -23,13 +23,34 @@ type Row = {
   status: "ja_na_iris" | "faltando" | "sem_valor";
   match?: MatchInfo | null;
   engagedMissing?: boolean;
+  turmaKey?: string | null;
+  turmaLabel?: string | null;
 };
 type Summary = {
-  turmaId: string; campaignSlug: string; productSlug: string;
+  turmaId?: string | null; campaignSlug: string; productSlug: string;
+  turmasTotal?: number; turmasOk?: number; turmasComErro?: number;
   totalNaApi: number; pagas: number; jaNaIris: number; faltando: number;
   semValor: number; engagedAusente: number;
 };
-type Result = { mode: string; created: number; summary: Summary; rows: Row[] };
+type TurmaSummary = {
+  turmaKey: string | null;
+  turmaLabel: string | null;
+  impactaTurmaId: string;
+  ok: boolean;
+  error?: string;
+  errorMessage?: string;
+  totalNaApi: number; pagas: number; jaNaIris: number; faltando: number;
+  semValor: number; engagedAusente: number; created: number;
+};
+type Result = { mode: string; created: number; summary: Summary; turmas?: TurmaSummary[]; rows: Row[] };
+
+/** Turma cadastrada na campanha (vinda do server component). */
+export type TurmaInfo = {
+  key: string;
+  label: string;
+  color: string | null;
+  impactaTurmaId: string | null;
+};
 
 function brl(v: number | null): string {
   if (v == null) return "—";
@@ -61,10 +82,19 @@ function getSecret(): string | null {
 export function ImpactaReconcile({
   campaignId,
   turmaId,
+  turmas,
 }: {
   campaignId: string;
   turmaId: string | null;
+  /** Turmas paralelas da campanha — quando presente, a conciliação é multi-turma. */
+  turmas?: TurmaInfo[];
 }) {
+  const turmaTargets = (turmas ?? []).filter(
+    (t) => t.impactaTurmaId && t.impactaTurmaId.trim() !== ""
+  );
+  const multi = turmaTargets.length > 0;
+  const canReconcile = multi || !!turmaId;
+  const colorByKey = new Map((turmas ?? []).map((t) => [t.key, t.color] as const));
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -122,13 +152,31 @@ export function ImpactaReconcile({
       >
         <div className="flex items-center gap-3">
           <h3 style={{ fontWeight: 700, fontSize: 14 }}>Conciliar matrículas (Impacta)</h3>
-          {turmaId ? (
+          {multi ? (
+            <span className="flex items-center gap-1.5 flex-wrap">
+              {turmaTargets.map((t) => (
+                <span
+                  key={t.key}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    background: t.color ? `${t.color}26` : "rgba(154,186,186,0.15)",
+                    color: t.color ?? "#9ABABA",
+                  }}
+                >
+                  {t.label} · {t.impactaTurmaId}
+                </span>
+              ))}
+            </span>
+          ) : turmaId ? (
             <span style={{ fontSize: 11, color: "var(--fg2)", fontFamily: "var(--font-mono)" }}>
               turma {turmaId}
             </span>
           ) : (
             <span style={{ fontSize: 11, color: "#E0A800" }}>
-              configure a “Turma (sistema interno)” acima e salve
+              configure a turma no Simpac (nas turmas acima ou no campo “Turma”) e salve
             </span>
           )}
         </div>
@@ -136,8 +184,8 @@ export function ImpactaReconcile({
           <button
             type="button"
             onClick={handlePreview}
-            disabled={!turmaId || loading || applying}
-            style={btn(!turmaId || loading || applying)}
+            disabled={!canReconcile || loading || applying}
+            style={btn(!canReconcile || loading || applying)}
           >
             {loading ? "Buscando…" : "Conciliar (prévia)"}
           </button>
@@ -171,12 +219,50 @@ export function ImpactaReconcile({
         </div>
       )}
 
+      {/* Resumo por turma (multi-turma): stats de cada uma + erro isolado */}
+      {result?.turmas && result.turmas.length > 1 && (
+        <div className="px-5 py-3 flex flex-col gap-2" style={{ borderBottom: "1px solid var(--cockpit-border)" }}>
+          {result.turmas.map((t) => {
+            const color = (t.turmaKey && colorByKey.get(t.turmaKey)) || "#9ABABA";
+            return (
+              <div key={t.impactaTurmaId} className="flex items-center gap-3 flex-wrap" style={{ fontSize: 12 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    background: `${color}26`,
+                    color,
+                    minWidth: 90,
+                    textAlign: "center",
+                  }}
+                >
+                  {t.turmaLabel ?? t.impactaTurmaId}
+                </span>
+                {t.ok ? (
+                  <>
+                    <Stat label="pagas" value={t.pagas} />
+                    <Stat label="já na IRIS" value={t.jaNaIris} color="#30D158" />
+                    <Stat label="faltando" value={t.faltando} color="#B08CFF" />
+                    {result.mode === "applied" && <Stat label="importadas" value={t.created} color="#30D158" />}
+                  </>
+                ) : (
+                  <span style={{ color: "#e74c3c", fontSize: 11 }}>{t.errorMessage ?? t.error}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {result && result.rows.length > 0 && (
         <div className="overflow-x-auto">
           <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ color: "var(--brand-soft)", fontSize: 10, textTransform: "uppercase", letterSpacing: "var(--ls-eyebrow)", fontWeight: 700 }}>
                 <th style={th}>Aluno</th>
+                {multi && <th style={th}>Turma</th>}
                 <th style={th}>CPF</th>
                 <th style={th}>Matrícula</th>
                 <th style={{ ...th, textAlign: "right" }}>Valor</th>
@@ -190,6 +276,19 @@ export function ImpactaReconcile({
                     <div style={{ color: "var(--fg1)", fontWeight: 600 }}>{r.name}</div>
                     {r.email && <div style={{ color: "var(--fg2)", fontSize: 11 }}>{r.email}</div>}
                   </td>
+                  {multi && (
+                    <td style={td}>
+                      {r.turmaKey ? (
+                        <Badge
+                          color={colorByKey.get(r.turmaKey) ?? "#9ABABA"}
+                          bg={`${colorByKey.get(r.turmaKey) ?? "#9ABABA"}26`}
+                          label={r.turmaLabel ?? r.turmaKey}
+                        />
+                      ) : (
+                        <span style={{ color: "var(--fg2)" }}>—</span>
+                      )}
+                    </td>
+                  )}
                   <td style={{ ...td, fontFamily: "var(--font-mono)", color: "var(--fg2)" }}>{maskCpf(r.cpf)}</td>
                   <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{dateBR(r.enrolledAt)}</td>
                   <td style={{ ...td, textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--fg1)" }}>{brl(r.valorPago)}</td>

@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkAdminAuth } from "@/lib/admin-auth";
+import { TurmaInputSchema, syncCampaignTurmas } from "@/lib/campaign-turmas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +54,8 @@ const CampaignCreate = z.object({
   isActive: z.boolean().optional(),
   engagedCheckoutSharedIds: z.array(z.string().min(1)).optional(),
   impactaTurmaId: nullishString,
+  // Turmas paralelas (presencial/online) — opcional; vazio = campanha simples.
+  turmas: z.array(TurmaInputSchema).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
       { status: 422 }
     );
   }
-  const data = parsed.data;
+  const { turmas, ...data } = parsed.data;
   try {
     // Se isActive=true, desativa outras do mesmo produto primeiro (transaction)
     if (data.isActive) {
@@ -103,6 +106,9 @@ export async function POST(req: NextRequest) {
         createdByUserId: a.mode === "session" ? a.userId : null,
       },
     });
+    if (turmas && turmas.length > 0) {
+      await syncCampaignTurmas(campaign.id, turmas);
+    }
     return NextResponse.json({ status: "created", campaign }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

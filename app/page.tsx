@@ -131,6 +131,25 @@ export default async function CockpitPage({
     /* tabela Campaign nao existe ainda */
   }
   const campaignWindow = activeCampaignEarly ? getCampaignWindow(activeCampaignEarly) : null;
+
+  // Turmas paralelas do produto (presencial/online) — mapa turmaKey →
+  // {label, cor} pros selos nas tabelas de vendas/leads. Cobre TODAS as
+  // campanhas do produto (não só a ativa) pra resolver vendas antigas.
+  // Vazio = campanha simples → nenhum selo é exibido.
+  let turmaMap: Record<string, { label: string; color: string | null }> = {};
+  try {
+    const allTurmas = await prisma.campaignTurma.findMany({
+      where: { campaign: { productSlug: slug } },
+      orderBy: [{ ordem: "asc" }],
+      select: { key: true, label: true, color: true, campaign: { select: { isActive: true } } },
+    });
+    // Campanha ativa tem precedência quando a mesma key existe em 2 campanhas.
+    for (const t of [...allTurmas].sort((a, b) => Number(b.campaign.isActive) - Number(a.campaign.isActive))) {
+      if (!(t.key in turmaMap)) turmaMap[t.key] = { label: t.label, color: t.color };
+    }
+  } catch {
+    /* tabela CampaignTurma nao existe ainda (pre-migration) */
+  }
   // Filtros de janela reutilizaveis — clampam cada metrica do cockpit a
   // [inicio, fim) da turma selecionada. Sem isso uma turma nova (clonada)
   // herda leads/visitas/engaged da turma anterior, porque essas queries
@@ -311,6 +330,8 @@ export default async function CockpitPage({
   let engagedLeads: Array<{
     id: string;
     kind: "engaged" | "whatsapp" | "form";
+    /** Turma paralela da campanha (CampaignTurma.key) — null = campanha simples. */
+    turmaKey?: string | null;
     externalId: string;
     status: string;            // engaged status OU "WHATSAPP_CLICK"
     lastEventType: string;
@@ -445,6 +466,7 @@ export default async function CockpitPage({
       rows.push({
         id: r.id,
         kind: "engaged",
+        turmaKey: r.turmaKey,
         externalId: r.externalId,
         status: r.status,
         lastEventType: r.lastEventType,
@@ -641,6 +663,7 @@ export default async function CockpitPage({
         null;
       return {
         id: s.id, source: s.source,
+        turmaKey: s.turmaKey,
         customerName: s.customerName,
         customerEmail: s.customerEmail, customerPhone: s.customerPhone,
         amount: Number(s.amount), currency: s.currency,
@@ -1188,6 +1211,7 @@ export default async function CockpitPage({
             sales={sales}
             totalCount={salesCount}
             totalAmount={salesTotal}
+            turmaMap={turmaMap}
           />
         </Section>
 
@@ -1204,7 +1228,7 @@ export default async function CockpitPage({
             periodLabel={activeCampaignEarly ? "toda a campanha" : "últimos 14 dias"}
             channelRules={channelRules}
           />
-          <EngagedLeadsTable rows={engagedLeads} totalCount={engagedLeadsCount} />
+          <EngagedLeadsTable rows={engagedLeads} totalCount={engagedLeadsCount} turmaMap={turmaMap} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <ChannelTable rows={[...channels]} />
             <CTAPositionTable rows={[...ctaPositions]} />

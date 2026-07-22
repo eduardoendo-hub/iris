@@ -30,6 +30,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkAdminAuth } from "@/lib/admin-auth";
 import { getCampaignResults } from "@/lib/analytics";
+import { TurmaInputSchema, syncCampaignTurmas } from "@/lib/campaign-turmas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,10 @@ const CloneInput = z.object({
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   engagedCheckoutSharedIds: z.array(z.string().min(1)).optional(),
+  // Turmas paralelas da nova campanha (checkout/Simpac novos). Se ausente,
+  // herda a ESTRUTURA das turmas da origem (keys/labels/cores) com
+  // sharedIds e impactaTurmaId ZERADOS — turma nova = checkout novo.
+  turmas: z.array(TurmaInputSchema).optional(),
   activate: z.boolean().optional(),
   overrides: z
     .object({
@@ -158,6 +163,33 @@ export async function POST(req: NextRequest) {
         createdByUserId: a.mode === "session" ? a.userId : null,
       },
     });
+
+    // Turmas paralelas: usa as informadas; senao herda a estrutura da origem
+    // (keys/labels/cores) com sharedIds e impactaTurmaId zerados.
+    let turmasToSync = input.turmas;
+    if (!turmasToSync) {
+      try {
+        const originTurmas = await prisma.campaignTurma.findMany({
+          where: { campaignId: from.id },
+          orderBy: { ordem: "asc" },
+        });
+        turmasToSync = originTurmas.map((t) => ({
+          key: t.key,
+          label: t.label,
+          color: t.color,
+          engagedSharedIds: [],
+          engagedProductIds: [],
+          impactaTurmaId: null,
+          ordem: t.ordem,
+        }));
+      } catch {
+        turmasToSync = [];
+      }
+    }
+    if (turmasToSync.length > 0) {
+      await syncCampaignTurmas(created.id, turmasToSync);
+    }
+
     return NextResponse.json(
       { status: "cloned", from: from.slug, campaign: created },
       { status: 201 }

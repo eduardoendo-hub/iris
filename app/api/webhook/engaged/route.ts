@@ -26,7 +26,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { PRODUCTS, getProductConfig, type ProductConfig } from "@/lib/products";
 import { promoteSiblingLeadsToPaid } from "@/lib/engaged-dedup";
-import { getCampaignBySharedId, getCampaignByTurmaId } from "@/lib/campaigns";
+import {
+  getCampaignBySharedId,
+  getCampaignByTurmaId,
+  getTurmaBySharedId,
+  getTurmaByImpactaTurmaId,
+} from "@/lib/campaigns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -742,8 +747,16 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   // encerramento (Feature A).
   const turmaId = pickTurmaId(p);
   const sharedId = pickSharedId(p);
-  let campaign = turmaId ? await getCampaignByTurmaId(turmaId) : null;
+  // TURMAS PARALELAS: se o sharedId/turmaId pertence a uma CampaignTurma
+  // (LP que vende N turmas ao mesmo tempo), resolve campanha + turma de uma
+  // vez e carimba turmaKey em EngagedPurchase/Sale. Senão, caminho legado
+  // (campanha simples, turmaKey=null).
+  let turmaMatch = turmaId ? await getTurmaByImpactaTurmaId(turmaId) : null;
+  if (!turmaMatch && sharedId) turmaMatch = await getTurmaBySharedId(sharedId);
+  let campaign = turmaMatch?.campaign ?? null;
+  if (!campaign && turmaId) campaign = await getCampaignByTurmaId(turmaId);
   if (!campaign && sharedId) campaign = await getCampaignBySharedId(sharedId);
+  const turmaKey = turmaMatch?.turma.key ?? null;
 
   // FILTRO DE PRODUTO — engaged manda webhooks de TODOS os produtos da
   // Impacta pra mesma URL. Sem filtro, viramos coletor de vendas do MBA,
@@ -864,6 +877,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
       create: {
         productSlug,
         campaignSlug,
+        turmaKey,
         externalId,
         status: purchaseStatus,
         lastEventType: eventType ?? "",
@@ -883,6 +897,7 @@ export async function processEngagedPayload(rawBody: string): Promise<{
         // Carimba a campanha se ainda nao tinha (evento .paid pode resolver
         // a turma que o lead_captured nao trouxe).
         ...(campaignSlug ? { campaignSlug } : {}),
+        ...(turmaKey ? { turmaKey } : {}),
         // So atualiza dados do cliente se o novo payload trouxe (evita
         // sobrescrever name/email/phone com null vindo de evento parcial)
         ...(customerName ? { customerName } : {}),
@@ -1016,6 +1031,9 @@ export async function processEngagedPayload(rawBody: string): Promise<{
   const saleData = {
     productSlug,
     campaignSlug,
+    // Turma resolvida pelo sharedId; fallback: a carimbada na EngagedPurchase
+    // (evento .paid pode chegar sem checkout completo apos re-entrega).
+    turmaKey: turmaKey ?? engagedPurchase.turmaKey ?? null,
     source: "ENGAGED" as const,
     customerName,
     customerEmail,
@@ -1048,6 +1066,8 @@ export async function processEngagedPayload(rawBody: string): Promise<{
           // So sobrescreve attribution se temos uma nova; preserva existente
           // (evita perder atribuicao em re-process de evento sem queryParams).
           ...(attributionForSale ? { attribution: attributionForSale } : {}),
+          // Carimba a turma se este evento a resolveu (nao apaga a existente).
+          ...(saleData.turmaKey ? { turmaKey: saleData.turmaKey } : {}),
         },
       });
     } else {

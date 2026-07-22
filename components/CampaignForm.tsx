@@ -41,7 +41,55 @@ export type CampaignInitial = {
   engagedCheckoutSharedIds?: string[];
   /** Número da turma no sistema interno da Impacta (conciliação de matrículas). */
   impactaTurmaId?: string | null;
+  /** Turmas paralelas (presencial/online) — vazio = campanha simples. */
+  turmas?: TurmaInitial[];
 };
+
+export type TurmaInitial = {
+  key: string;
+  label: string;
+  color: string | null;
+  engagedSharedIds: string[];
+  engagedProductIds?: string[];
+  impactaTurmaId: string | null;
+};
+
+/** Linha de turma no estado do form (sharedIds como texto editável). */
+type TurmaRow = {
+  key: string;
+  keyLocked: boolean; // veio do banco — não renomear (carimbo em vendas)
+  label: string;
+  color: string;
+  sharedIdsText: string;
+  engagedProductIds: string[];
+  impactaTurmaId: string;
+};
+
+const TURMA_COLORS = ["#0A88F4", "#30D158", "#E0A800", "#B08CFF", "#EC6088", "#0ABAB5"];
+
+function slugifyKey(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+/** "abc, def" ou "abc\ndef" -> ["abc","def"] sem vazios/duplicados. */
+function splitIds(s: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of s.split(/[\n,;\s]+/)) {
+    const v = raw.trim();
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  }
+  return out;
+}
 
 /** Textarea (1 por linha) -> array limpo, sem vazios nem duplicados. */
 function linesToArray(s: string): string[] {
@@ -98,7 +146,39 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
     (initial?.engagedCheckoutSharedIds ?? []).join("\n")
   );
   const [impactaTurmaId, setImpactaTurmaId] = useState(initial?.impactaTurmaId ?? "");
+  const [turmas, setTurmas] = useState<TurmaRow[]>(
+    (initial?.turmas ?? []).map((t) => ({
+      key: t.key,
+      keyLocked: true,
+      label: t.label,
+      color: t.color ?? "",
+      sharedIdsText: t.engagedSharedIds.join("\n"),
+      engagedProductIds: t.engagedProductIds ?? [],
+      impactaTurmaId: t.impactaTurmaId ?? "",
+    }))
+  );
   const status = initial?.status ?? (initial?.isActive ? "ACTIVE" : "DRAFT");
+
+  function updateTurma(i: number, patch: Partial<TurmaRow>) {
+    setTurmas((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+  }
+  function addTurma() {
+    setTurmas((prev) => [
+      ...prev,
+      {
+        key: "",
+        keyLocked: false,
+        label: "",
+        color: TURMA_COLORS[prev.length % TURMA_COLORS.length],
+        sharedIdsText: "",
+        engagedProductIds: [],
+        impactaTurmaId: "",
+      },
+    ]);
+  }
+  function removeTurma(i: number) {
+    setTurmas((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   // Custos totais calculados
   const num = (s: string): number => (s === "" ? 0 : Number(s) || 0);
@@ -132,6 +212,19 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
     body.marketingPlanFilename = marketingPlanFilename === "" ? null : marketingPlanFilename;
     body.engagedCheckoutSharedIds = linesToArray(engagedSharedIds);
     body.impactaTurmaId = impactaTurmaId.trim() === "" ? null : impactaTurmaId.trim();
+    // Turmas paralelas: manda o array completo (replace-all por key no server).
+    // Linhas sem label são descartadas.
+    body.turmas = turmas
+      .filter((t) => t.label.trim() !== "")
+      .map((t, i) => ({
+        key: t.key.trim() !== "" ? t.key.trim() : slugifyKey(t.label),
+        label: t.label.trim(),
+        color: t.color.trim() === "" ? null : t.color.trim(),
+        engagedSharedIds: splitIds(t.sharedIdsText),
+        engagedProductIds: t.engagedProductIds,
+        impactaTurmaId: t.impactaTurmaId.trim() === "" ? null : t.impactaTurmaId.trim(),
+        ordem: i,
+      }));
 
     try {
       const url = editing
@@ -417,7 +510,7 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
       <Section title="Engaged / Checkout">
         <Field
           label="SharedID(s) do checkout Engaged"
-          hint="1 por linha. Muda a cada turma (URL nova). O webhook usa isto pra ligar a venda à campanha certa."
+          hint="1 por linha. Campanha SIMPLES (1 turma). Se você cadastrar turmas paralelas abaixo, os sharedIds passam a viver em cada turma e este campo vira só fallback."
         >
           <textarea
             value={engagedSharedIds}
@@ -428,6 +521,152 @@ export function CampaignForm({ initial }: { initial?: CampaignInitial }) {
             style={{ ...inputProps.style, fontFamily: "var(--font-mono)", fontSize: 12 }}
           />
         </Field>
+      </Section>
+
+      <Section title="Turmas paralelas (opcional)">
+        <p style={{ fontSize: 11, color: "var(--fg2)", marginTop: -4 }}>
+          Para LP que vende mais de uma turma ao mesmo tempo (ex.: presencial + online ao vivo).
+          Cada turma tem seu checkout Engaged e sua turma no Simpac; vendas e leads ganham o
+          selo da turma. Faturamento, investimento e metas seguem consolidados na campanha.
+        </p>
+        <div className="flex flex-col gap-3">
+          {turmas.map((t, i) => (
+            <div
+              key={i}
+              className="rounded-md p-3 flex flex-col gap-3"
+              style={{
+                background: "var(--cockpit-card-strong)",
+                border: `1px solid ${t.color || "var(--cockpit-border)"}`,
+              }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    background: t.color ? `${t.color}26` : "var(--cockpit-card)",
+                    color: t.color || "var(--fg2)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {t.label.trim() || `Turma ${i + 1}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeTurma(i)}
+                  style={{
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 5,
+                    background: "transparent",
+                    border: "1px solid #EC6088",
+                    color: "#EC6088",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Remover
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <Field label="Nome da turma *" hint='ex: "Presencial" ou "Online ao vivo"'>
+                  <input
+                    type="text"
+                    value={t.label}
+                    onChange={(e) =>
+                      updateTurma(i, {
+                        label: e.target.value,
+                        ...(t.keyLocked ? {} : { key: slugifyKey(e.target.value) }),
+                      })
+                    }
+                    {...inputProps}
+                  />
+                </Field>
+                <Field
+                  label="Chave (carimbo)"
+                  hint={t.keyLocked ? "não renomear — já carimba vendas" : "gerada do nome; vira o carimbo das vendas"}
+                >
+                  <input
+                    type="text"
+                    value={t.key}
+                    readOnly={t.keyLocked}
+                    onChange={(e) => updateTurma(i, { key: slugifyKey(e.target.value) })}
+                    {...inputProps}
+                    style={{
+                      ...inputProps.style,
+                      fontFamily: "var(--font-mono)",
+                      opacity: t.keyLocked ? 0.6 : 1,
+                    }}
+                  />
+                </Field>
+                <Field label="Cor do selo" hint="clique pra escolher">
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    {TURMA_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => updateTurma(i, { color: c })}
+                        aria-label={`cor ${c}`}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          background: c,
+                          border: t.color === c ? "2px solid var(--fg1)" : "2px solid transparent",
+                          cursor: "pointer",
+                        }}
+                      />
+                    ))}
+                  </div>
+                </Field>
+                <Field label="Turma no Simpac" hint="nº na API de matrículas (conciliação)">
+                  <input
+                    type="text"
+                    value={t.impactaTurmaId}
+                    onChange={(e) => updateTurma(i, { impactaTurmaId: e.target.value })}
+                    placeholder="ex: 175075"
+                    inputMode="numeric"
+                    {...inputProps}
+                    style={{ ...inputProps.style, fontFamily: "var(--font-mono)" }}
+                  />
+                </Field>
+              </div>
+              <Field
+                label="SharedID(s) do checkout Engaged desta turma"
+                hint="1 por linha ou separados por vírgula — aceita 2+"
+              >
+                <textarea
+                  value={t.sharedIdsText}
+                  onChange={(e) => updateTurma(i, { sharedIdsText: e.target.value })}
+                  rows={2}
+                  placeholder="ex: tm8cdtdrbf"
+                  {...inputProps}
+                  style={{ ...inputProps.style, fontFamily: "var(--font-mono)", fontSize: 12 }}
+                />
+              </Field>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addTurma}
+            style={{
+              fontSize: 12,
+              padding: "8px 14px",
+              borderRadius: 6,
+              background: "transparent",
+              border: "1px dashed var(--cockpit-border-strong)",
+              color: "var(--fg1)",
+              fontWeight: 600,
+              cursor: "pointer",
+              alignSelf: "flex-start",
+            }}
+          >
+            + Adicionar turma
+          </button>
+        </div>
       </Section>
 
       <Section title="Plano de marketing">

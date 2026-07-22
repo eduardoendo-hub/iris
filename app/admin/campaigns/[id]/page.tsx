@@ -23,7 +23,10 @@ export default async function EditCampaignPage({
   if (role !== "ADMIN") redirect("/admin");
 
   const { id } = await params;
-  const c = await prisma.campaign.findUnique({ where: { id } });
+  const c = await prisma.campaign.findUnique({
+    where: { id },
+    include: { turmas: { orderBy: { ordem: "asc" } } },
+  });
   if (!c) notFound();
 
   const initial: CampaignInitial = {
@@ -48,6 +51,14 @@ export default async function EditCampaignPage({
     status: c.status,
     engagedCheckoutSharedIds: c.engagedCheckoutSharedIds,
     impactaTurmaId: c.impactaTurmaId,
+    turmas: c.turmas.map((t) => ({
+      key: t.key,
+      label: t.label,
+      color: t.color,
+      engagedSharedIds: t.engagedSharedIds,
+      engagedProductIds: t.engagedProductIds,
+      impactaTurmaId: t.impactaTurmaId,
+    })),
   };
 
   return (
@@ -97,7 +108,16 @@ export default async function EditCampaignPage({
           </Link>
         </header>
         <CampaignForm initial={initial} />
-        <ImpactaReconcile campaignId={c.id} turmaId={c.impactaTurmaId} />
+        <ImpactaReconcile
+          campaignId={c.id}
+          turmaId={c.impactaTurmaId}
+          turmas={c.turmas.map((t) => ({
+            key: t.key,
+            label: t.label,
+            color: t.color,
+            impactaTurmaId: t.impactaTurmaId,
+          }))}
+        />
         <CampaignMediaLinks campaignId={c.id} goalCpl={c.goalCpl ? Number(c.goalCpl) : null} />
       </main>
     </div>

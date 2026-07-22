@@ -20,6 +20,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkAdminAuth } from "@/lib/admin-auth";
 import { getCampaignResults } from "@/lib/analytics";
+import { TurmaInputSchema, syncCampaignTurmas } from "@/lib/campaign-turmas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,8 @@ const CampaignUpdate = z.object({
   engagedCheckoutSharedIds: z.array(z.string().min(1)).optional(),
   // Número da turma no sistema interno da Impacta (conciliação de matrículas).
   impactaTurmaId: nullableString,
+  // Turmas paralelas (presencial/online). Se presente, replace-all por key.
+  turmas: z.array(TurmaInputSchema).optional(),
 });
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -69,7 +72,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "unauthorized", reason: a.reason }, { status: 401 });
   }
   const { id } = await ctx.params;
-  const campaign = await prisma.campaign.findUnique({ where: { id } });
+  const campaign = await prisma.campaign.findUnique({
+    where: { id },
+    include: { turmas: { orderBy: { ordem: "asc" } } },
+  });
   if (!campaign) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return NextResponse.json({ campaign });
 }
@@ -162,7 +168,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       { status: 422 }
     );
   }
-  const data = parsed.data;
+  const { turmas, ...data } = parsed.data;
   try {
     // Se mudou pra isActive=true, desativa outras do mesmo produto e mantem
     // status em lockstep (ACTIVE). isActive=false sem encerrar -> DRAFT.
@@ -183,6 +189,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         ...(data.isActive === true ? { status: "ACTIVE" as const } : {}),
       },
     });
+    // Turmas paralelas: undefined = nao mexe; array (mesmo vazio) = replace-all.
+    if (turmas !== undefined) {
+      await syncCampaignTurmas(id, turmas);
+    }
     return NextResponse.json({ status: "updated", campaign });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
