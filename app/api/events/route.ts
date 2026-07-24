@@ -44,6 +44,9 @@ const ALLOWED_ORIGINS = new Set([
   // dava CORS/503 quando o anuncio aponta pra URL da impacta.com.br.
   "https://www.impacta.com.br",
   "https://impacta.com.br",
+  // Lógica de Programação — LP multi-turma; anuncios apontam pro dominio da
+  // Impacta (ja liberado acima), mas trafego direto/SEO chega pelo subdominio:
+  "https://logica.technowhub.ai",
   // ADV-IA
   "https://advia.technowhub.ai",         // canonico (LP servida aqui)
   "https://advia.impacta.com.br",        // redirect -> technowhub
