@@ -71,13 +71,16 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // Campanha real no Meta: "M1-PROSP-CLAUDEPRO-MAI26" → bate com CONTAIN "CLAUDEPRO"
     metaCampaignFilter: "CLAUDEPRO",
     googleCampaignFilter: "CLAUDEPRO",
-    // Turma vigente = Agosto/2026 (Turma 3, remarcada p/ 03/08). campaignSlug e' usado no push de
+    // Turma vigente = Setembro/2026 (Turma 4, 14–18/09). campaignSlug e' usado no push de
     // lead DRAFT do Engaged pro RD CRM — tem que apontar pra turma ativa.
-    campaignSlug: "claude-pro-agosto-2026",
-    // sharedId/productId: julho (72rspa5wc8 / 6a208a4cccd3d6001cbf58dd) primeiro;
-    // maio (x68jpj7w3k / 69fe...) mantido p/ nao regredir webhooks em transito
-    // da turma anterior (a campanha ENDED ja barra no gate do webhook).
-    engagedCheckoutSharedIds: ["72rspa5wc8", "x68jpj7w3k"],
+    campaignSlug: "claude-pro-setembro-2026",
+    // sharedId: setembro (qnwmjm487q) primeiro; agosto (72rspa5wc8) e maio
+    // (x68jpj7w3k) mantidos p/ nao regredir webhooks em transito de turmas
+    // anteriores (a campanha ENDED ja barra no gate do webhook).
+    // engagedProductId da Turma 4: preencher com product._id do primeiro
+    // webhook Purchase do checkout qnwmjm487q; ate la, os antigos servem
+    // de fallback de atribuicao.
+    engagedCheckoutSharedIds: ["qnwmjm487q", "72rspa5wc8", "x68jpj7w3k"],
     engagedProductIds: ["6a208a4cccd3d6001cbf58dd", "69fe28452501c7001ca77fe5"],
   },
   "peopleai": {
