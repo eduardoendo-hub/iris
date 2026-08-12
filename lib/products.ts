@@ -107,11 +107,13 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // (ex.: "M1-PROSP-CODIGOZERO-JUN26", "G1-SEARCH-CODIGOZERO-JUN26").
     metaCampaignFilter: "CODIGOZERO",
     googleCampaignFilter: "CODIGOZERO",
-    // Turma remarcada: início 03/08/2026 (antes 29/06). campaignSlug vigente = agosto.
-    campaignSlug: "codigozero-agosto-2026",
-    // Engaged checkout SharedID — extraído de
-    //   https://impacta.site.engaged.com.br/p/checkout/wpjw515nvn
-    engagedCheckoutSharedIds: ["wpjw515nvn"],
+    // Turma remarcada de novo: início 28/09/2026 (antes 03/08, antes 29/06).
+    campaignSlug: "codigozero-setembro-2026",
+    // Engaged checkout SharedIDs — extraídos de
+    //   https://impacta.site.engaged.com.br/p/checkout/qeuqyr0d3y  (turma 28/09, vigente)
+    //   https://impacta.site.engaged.com.br/p/checkout/wpjw515nvn  (turmas anteriores; mantido
+    //     para não perder atribuição de compras em voo do link antigo)
+    engagedCheckoutSharedIds: ["qeuqyr0d3y", "wpjw515nvn"],
   },
   "advia": {
     slug: "advia",
