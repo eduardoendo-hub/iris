@@ -63,6 +63,9 @@ const ALLOWED_ORIGINS = new Set([
   // Formacao MySQL Profissional (produto 'mysql') — curso EAD, parceria Olhar Digital
   "https://mysql.technowhub.ai",         // canonico (LP servida via Coolify)
   "https://mysql.impacta.com.br",        // futuro espelho/redirect -> technowhub
+  // AI Creator (Criacao, Storytelling e Video com IA) — turma outubro/2026
+  "https://aicreator.technowhub.ai",   // canonico (LP servida aqui)
+  "https://aicreator.impacta.com.br",  // futuro espelho/redirect -> technowhub
   // Outros produtos / futuras LPs
   "https://impacta.technowhub.ai",
   // Dev

@@ -215,6 +215,23 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     engagedCheckoutSharedIds: ["nu3qkxhw84"],
   },
 
+  "aicreator": {
+    slug: "aicreator",
+    name: "AI Creator",
+    // LP servida em aicreator.technowhub.ai; quando a pagina entrar no dominio
+    // da Impacta (impacta.com.br/cursos/aicreator), trocar aqui tambem.
+    lpUrl: "https://aicreator.technowhub.ai",
+    // Convencao esperada nas campanhas Meta/Google: nome contendo "AICREATOR"
+    // (ex.: "M1-PROSP-AICREATOR-OUT26", "G1-SEARCH-AICREATOR-OUT26").
+    metaCampaignFilter: "AICREATOR",
+    googleCampaignFilter: "AICREATOR",
+    // Turma unica online ao vivo: 6, 7 e 8/10/2026.
+    campaignSlug: "aicreator-outubro-2026",
+    // Engaged checkout SharedID — extraido do CTA da LP:
+    //   https://impacta.site.engaged.com.br/p/checkout/5ruizijtw3
+    engagedCheckoutSharedIds: ["5ruizijtw3"],
+  },
+
   // Future products — descomentar quando entrarem:
   //
   // "direito5": {
