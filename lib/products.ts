@@ -71,15 +71,14 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // Campanha real no Meta: "M1-PROSP-CLAUDEPRO-MAI26" → bate com CONTAIN "CLAUDEPRO"
     metaCampaignFilter: "CLAUDEPRO",
     googleCampaignFilter: "CLAUDEPRO",
-    // Turma vigente = Setembro/2026 (Turma 4, 14–18/09). campaignSlug e' usado no push de
-    // lead DRAFT do Engaged pro RD CRM — tem que apontar pra turma ativa.
-    campaignSlug: "claude-pro-setembro-2026",
-    // sharedId: setembro (qnwmjm487q) primeiro; agosto (72rspa5wc8) e maio
-    // (x68jpj7w3k) mantidos p/ nao regredir webhooks em transito de turmas
-    // anteriores (a campanha ENDED ja barra no gate do webhook).
-    // engagedProductId da Turma 4: preencher com product._id do primeiro
-    // webhook Purchase do checkout qnwmjm487q; ate la, os antigos servem
-    // de fallback de atribuicao.
+    // Turma vigente = Outubro/2026 (Turma 5, 19–23/10 — remarcacao usando a
+    // mesma vaga Engaged da Turma 4). campaignSlug e' usado no push de lead
+    // DRAFT do Engaged pro RD CRM — tem que apontar pra turma ativa.
+    campaignSlug: "claude-pro-outubro-2026",
+    // sharedId: outubro/setembro reusam a mesma vaga qnwmjm487q (Turma 5 e' remarcacao
+    // da 4). agosto (72rspa5wc8) e maio (x68jpj7w3k) mantidos p/ nao regredir
+    // webhooks em transito de turmas anteriores (campanha ENDED ja barra no
+    // gate do webhook, mas o sharedId ainda serve pra atribuir Sale correto).
     engagedCheckoutSharedIds: ["qnwmjm487q", "72rspa5wc8", "x68jpj7w3k"],
     engagedProductIds: ["6a208a4cccd3d6001cbf58dd", "69fe28452501c7001ca77fe5"],
   },
@@ -218,9 +217,10 @@ export const PRODUCTS: Record<string, ProductConfig> = {
   "aicreator": {
     slug: "aicreator",
     name: "AI Creator",
-    // LP servida em aicreator.technowhub.ai; quando a pagina entrar no dominio
-    // da Impacta (impacta.com.br/cursos/aicreator), trocar aqui tambem.
-    lpUrl: "https://aicreator.technowhub.ai",
+    // LP publicada no dominio da Impacta (proxy) desde 09/2026 — os anuncios
+    // apontam pra ca. O host fisico aicreator.technowhub.ai segue no ar; ambas
+    // as origens estao em ALLOWED_ORIGINS do /api/events.
+    lpUrl: "https://impacta.com.br/cursos/aicreator/",
     // Convencao esperada nas campanhas Meta/Google: nome contendo "AICREATOR"
     // (ex.: "M1-PROSP-AICREATOR-OUT26", "G1-SEARCH-AICREATOR-OUT26").
     metaCampaignFilter: "AICREATOR",
