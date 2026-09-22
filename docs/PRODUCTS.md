@@ -36,7 +36,7 @@ para o RD CRM). A turma que realmente vale a cada momento é a `Campaign` com
 | `advia` | ADV-IA | `ADVIA` | `advia-junho-2026` |
 | `mba-academy` | MBA Academy AI Master | — (sem mídia paga) | `mba-academy-ai-master` |
 | `qa-next` | QA Next | `QANEXT` | `qa-next-agosto-2026` |
-| `logica` | Lógica de Programação | `LOGICA` | `logica-setembro-2026` |
+| `logica` | Lógica de Programação | `LOGICA` | `logica-outubro-2026` |
 | `corporativo` | Corporativo | `CORPORATIVO` | `corporativo` |
 | `mysql` | Formação MySQL Profissional | `MYSQL` | `mysql-lancamento` |
 | `aicreator` | AI Creator | `AICREATOR` (só Meta por ora) | `aicreator-outubro-2026` |
