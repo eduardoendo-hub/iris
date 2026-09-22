@@ -2,15 +2,23 @@
 
 Documenta o esquema de autenticação do IRIS + rotação de secrets.
 
-## ⚠️ HOJE O COCKPIT TÁ ABERTO PRA INTERNET
+## Estado do acesso — verificado em 2026-08-31
 
-A env `IRIS_PUBLIC_PREVIEW=true` está bypassando toda a autenticação no `proxy.ts`.
-**Pra fechar agora**:
+**O cockpit exige login.** `GET https://iris.technowhub.ai/` responde 307 para
+`/login`, e `/admin/*` idem — ou seja, `IRIS_PUBLIC_PREVIEW` **não** está ligado
+em produção. (Este documento antes afirmava o contrário; o alerta era antigo.)
 
-1. Coolify → app `iris` → Environment Variables
-2. **REMOVE** ou seta `IRIS_PUBLIC_PREVIEW=false`
-3. Redeploy
-4. Configura Google OAuth (passos abaixo) ANTES, senão ninguém consegue logar.
+Para reconferir a qualquer momento, sem credencial nenhuma:
+
+```bash
+curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" -I https://iris.technowhub.ai/
+# esperado: 307 -> https://iris.technowhub.ai/login
+```
+
+Se algum dia voltar 200, é `IRIS_PUBLIC_PREVIEW=true` bypassando o `proxy.ts`
+(bypass legítimo só em dev). Para fechar: Coolify → app `iris` → Environment
+Variables → remover a env (ou `=false`) → redeploy. Garanta o Google OAuth
+configurado **antes**, senão ninguém consegue logar.
 
 ## Camadas de proteção
 
@@ -80,7 +88,45 @@ UPDATE "User" SET role = 'ADMIN' WHERE email = 'seu@email.com';
 
 (No futuro: criar endpoint admin com primeiro-user-auto-admin, ou via página de gestão de usuários.)
 
+## ⚠️ Rotas de debug expostas — corrigido em 2026-09-06
+
+`/api/debug/leads` e `/api/debug/visit-events` estavam **públicas na internet**,
+sem nenhuma credencial. Confirmado com `curl` sem header: `leads` respondeu 200
+devolvendo **nome, e-mail e telefone**; `visit-events` devolveu 123 eventos de
+visitantes com UTMs e URLs.
+
+Causa: o `proxy.ts` lista `/api/debug` em `PUBLIC_ROUTES` assumindo que cada
+handler valida `X-Admin-Secret` por conta própria — e esses dois nunca
+validaram (o comentário no código dizia "por ora, pública").
+
+Correção: guard `authorized()` nos dois, no mesmo padrão de
+`/api/debug/webhooks`. **Só vale depois do deploy.** Para continuar usando:
+
+```bash
+curl -s -H "X-Admin-Secret: $IRIS_WEBHOOK_SECRET" "https://iris.technowhub.ai/api/debug/visit-events?product=aicreator&days=7"
+```
+
+Regra para rotas novas sob `/api/debug` ou `/api/admin`: **o middleware não
+protege, o handler protege.** Toda rota nova nesses prefixos precisa do guard.
+
 ## Rotação de secrets
+
+### ⚠️ Pendente — credenciais expostas em chat
+
+Estas credenciais foram digitadas/coladas em sessões de chat e **devem ser
+rotacionadas**. São ações manuais, no painel de cada serviço:
+
+| Credencial | Onde rotacionar | Depois |
+|---|---|---|
+| Senha do Postgres de produção | Coolify → serviço `postgres` | atualizar `DATABASE_URL` do app e redeploy |
+| Token da API do RD Station | painel RD Station → integrações | atualizar env no `integracao-rd` e na IRIS |
+| Google OAuth *client secret* | Google Cloud → projeto 184293899030 → credenciais | gerar novo refresh token e atualizar envs |
+| `IRIS_WEBHOOK_SECRET` | gerar novo (`openssl rand -hex 32`) e trocar no Coolify | exposto em chat em 2026-09-06; dá acesso a **todos** os `/api/admin/*`. Ver "Como trocar" abaixo. |
+
+Mitigação já existente: o Postgres **não** está exposto publicamente (porta 5432
+fechada no servidor) — o acesso é só por dentro da rede do Coolify. Isso reduz a
+urgência, mas não substitui a rotação.
+
 
 ### Quando trocar
 

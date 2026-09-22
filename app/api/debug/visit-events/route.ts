@@ -6,8 +6,7 @@
  *   - Se vêm com UTM preenchido ou anônimos (tráfego direto/orgânico,
  *     ou anúncio cuja URL de destino esqueceu de adicionar ?utm_source=...)
  *
- * Em produção real, rota deve ser protegida por auth. Por ora,
- * publica e mascarável depois.
+ * Auth: X-Admin-Secret = IRIS_WEBHOOK_SECRET.
  *
  * Query:
  *   ?product=codigozero      (default claude-pro)
@@ -21,7 +20,19 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Auth: header X-Admin-Secret = IRIS_WEBHOOK_SECRET — mesmo padrao dos outros
+// /api/debug (webhooks, parse-test, auth). Sem isso a rota fica PUBLICA: o
+// middleware (proxy.ts) libera /api/debug inteiro assumindo auth no handler.
+function authorized(req: Request): boolean {
+  const secret = process.env.IRIS_WEBHOOK_SECRET;
+  if (!secret) return false;
+  return (req.headers.get("x-admin-secret") || "") === secret;
+}
+
 export async function GET(request: Request) {
+  if (!authorized(request)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const url = new URL(request.url);
   const product = url.searchParams.get("product") || "claude-pro";
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
