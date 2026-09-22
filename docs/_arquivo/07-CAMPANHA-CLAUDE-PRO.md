@@ -1,3 +1,10 @@
+> **📦 ARQUIVADO — documento histórico.**
+> Descreve a **primeira** campanha do Curso Claude Pro (turma de maio/2026,
+> 11/05→08/06). O produto já está na turma de setembro/2026, e a turma vigente
+> passou a viver no banco (`Campaign` ACTIVE, editável em `/admin/campaigns`),
+> não em markdown. Mantido como exemplo de planejamento de campanha.
+> Para operar hoje: [OPERACAO-CAMPANHA.md](../OPERACAO-CAMPANHA.md).
+
 # 07 — Campanha Curso Claude Pro (lançamento 11/05 → 08/06/2026)
 
 Primeira campanha Impacta a entrar no IRIS. Serve como template para futuras LPs Impacta

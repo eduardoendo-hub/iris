@@ -1,5 +1,10 @@
 # 01 — Arquitetura
 
+> **Estado:** documento de arquitetura escrito no início do projeto e revisado em
+> 2026-08-31 contra o código. As linhas marcadas com _(não implementado)_ são
+> planos que nunca saíram do papel — ficam registrados de propósito, para não
+> serem reinventados sem decisão. O que roda hoje está em [`CLAUDE.md`](../CLAUDE.md).
+
 ## Stack
 | Camada | Tecnologia | Motivo |
 |---|---|---|
@@ -7,20 +12,24 @@
 | Design System | Tokens importados de `technow-social-engine/design-system/tech_now_design_system` | Identidade TechNow consistente |
 | Database | PostgreSQL via Prisma 6 | Mesmo padrão; Prisma pra type-safety |
 | Auth | NextAuth (Google OAuth) | Restrito a domínios @impacta / @technowhub |
-| AI | Anthropic SDK (Claude) | `claude-sonnet-4-6` default; `claude-opus-4-7` pra análises pesadas |
-| Cache | Redis (Upstash free tier) | TTL curto pros dados de API |
-| Cron | Vercel Cron OU Coolify scheduled tasks | Ingestão a cada 15min |
+| AI | Anthropic SDK (Claude) | insight diário + gestor de tráfego (ver `lib/agent/`) |
+| Cache | ~~Redis (Upstash)~~ _(não implementado)_ | Nunca foi necessário — as consultas batem direto no Postgres |
+| Cron | Coolify scheduled tasks → `/api/cron/*` (header `X-Cron-Secret`) | Ingestão + agentes |
 | Hosting | Coolify (servidor `159.69.240.1`) | Mesmo padrão das LPs |
-| Domínio | `iris.technowhub.ai` | A criar no GoDaddy + Coolify |
+| Domínio | `iris.technowhub.ai` | No ar |
 
 ## Fontes de dados
 | Fonte | API | O que traz | Auth |
 |---|---|---|---|
 | GA4 | GA4 Data API v1 | sessions, events, conversions, UTMs | Service Account |
-| Google Ads | Google Ads API v17+ | cost, clicks, impressions, CPC, search terms | Dev Token + OAuth |
+| Google Ads | REST **v23** via `lib/ingest/google-rest.ts` (fetch nativo — a lib `google-ads-api` quebra no container) | cost, clicks, impressions, CPC, search terms | Dev Token + OAuth (app publicado) |
 | Meta Ads | Marketing API v19+ | cost, impressions, reach por campaign | System User Token |
-| Sympla | Sympla API v3 | inscrições efetivadas | API Key |
-| Search Console | Search Console API | queries, posições, CTR orgânico | Service Account |
+| Sympla | ~~Sympla API v3~~ _(não implementado)_ | Existe só como valor de enum no schema | — |
+| Search Console | ~~Search Console API~~ _(não implementado)_ | — | — |
+
+Fontes que **existem e não estavam nesta tabela**: o webhook do Engaged
+(`/api/webhook/engaged`, vendas), os eventos das próprias LPs (`/api/events`,
+`VisitEvent`) e a reconciliação com a API da Impacta (`lib/ingest/impacta.ts`).
 
 ## Fluxo de dados
 ```

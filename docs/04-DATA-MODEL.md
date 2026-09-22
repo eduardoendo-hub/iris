@@ -1,8 +1,57 @@
 # 04 — Modelo de Dados
 
-Schema base em Prisma. Todos os IDs são `cuid()`. Timestamps em UTC.
+> **Fonte da verdade: [`prisma/schema.prisma`](../prisma/schema.prisma).**
+> Este documento detalha as entidades do núcleo original; o schema cresceu para
+> **26 modelos** desde então. O mapa abaixo cobre todos — os blocos `prisma`
+> detalhados mais adiante são do núcleo e podem ficar atrás do schema. Em caso
+> de divergência, o schema vence.
 
-## Entidades
+## Mapa das tabelas (26)
+
+**Catálogo e campanha** — o eixo de tudo
+| Tabela | Papel |
+|---|---|
+| `Product` | produto monitorado (IDs externos, prefixo de UTM) |
+| `Campaign` | turma/lançamento. **1 ACTIVE por produto**; a janela é o escopo de todos os números |
+| `CampaignTurma` | turmas paralelas de uma campanha (ex.: presencial + online), de-para `sharedId → turma` |
+
+**Tráfego e mídia**
+| Tabela | Papel |
+|---|---|
+| `VisitEvent` | evento cru da LP (`/api/events`) — grava mesmo com o gate fechado |
+| `MetricSample` | métrica de mídia agregada **por produto** |
+| `CampaignMetricSample` | métrica **por campanha de mídia**, granular — alimenta o Gestor de Tráfego |
+| `TrackedCampaign` | campanha do Meta/Google vinculada a uma `Campaign` da IRIS |
+| `ChannelGroup` | classifica utm_source/medium em canal de negócio (regra global) |
+| `Snapshot` | foto agregada por bucket/fonte (núcleo original) |
+
+**Lead e venda**
+| Tabela | Papel |
+|---|---|
+| `Lead` | lead capturado pela LP |
+| `Sale` | venda confirmada (carimbada com `campaignSlug`/`turmaKey`) |
+| `EngagedPurchase` | pedido do Engaged em qualquer status — base da recuperação |
+| `WebhookLog` | auditoria de webhook recebido |
+
+**Camada de IA**
+| Tabela | Papel |
+|---|---|
+| `DailyInsight` | insight diário por produto (o que aparece no cockpit) |
+| `AgentRecommendation` | recomendação do Gestor de Tráfego, com `evidence.apply` para o 1-clique |
+| `Insight` | insights do núcleo original |
+
+**Recuperação de checkout** (WhatsApp via ChatPro)
+| Tabela | Papel |
+|---|---|
+| `RecoveryTouch` | 1 linha = 1 mensagem enviada. Existir linha = foi enviado (dry-run não grava) |
+| `RecoveryTemplate` | texto/template de cada passo da cadência, editável em `/admin/recovery` |
+
+**Acesso**
+`User`, `Account`, `Session`, `VerificationToken` (Auth.js) · `AllowedEmail`,
+`AllowedEmailCampaign`, `AllowedDomain` (quem pode logar) · `PushSubscription`
+(tabela existe, **Web Push nunca foi implementado**).
+
+## Entidades do núcleo (detalhe)
 
 ### `Product`
 Uma LP/produto monitorado.
@@ -167,7 +216,13 @@ model PushSubscription {
 - `Snapshot` DAY: 5 anos
 - `Insight`: 5 anos (ou todo histórico)
 - `rawJson` em snapshots > 30 dias: opcional purge se ocupar muito
-- Job mensal de cleanup em `/api/cron/cleanup`
+- ⚠️ O job de cleanup (`/api/cron/cleanup`) **nunca foi implementado** — a retenção acima é intenção, não comportamento. Crons que existem: `ga4`, `meta-ads`, `google-ads`, `daily-insight`, `gestor-trafego`, `abandoned-checkout`.
 
 ## Migrations
-Cada mudança é uma migration Prisma versionada. Em produção: `prisma migrate deploy` rodando no startup do container Coolify.
+Cada mudança é uma migration Prisma versionada.
+
+⚠️ **Correção importante:** migrations **NÃO** rodam no startup do container — o
+build standalone do Next não traz o Prisma CLI. Em produção, aplique com
+`POST /api/admin/migrate` (header `X-Cron-Secret`) e depois redeploy no Coolify.
+Escreva sempre migrations idempotentes (`IF NOT EXISTS`, guards em `DO $$`);
+ver `CLAUDE.md` e as migrations `*_baseline_*` / `*_reconcile_*`.

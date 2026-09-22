@@ -1,3 +1,9 @@
+> **📦 ARQUIVADO — documento histórico.**
+> Plano de implantação dos 3 primeiros dias (deploy previsto para 2026-05-10).
+> Foi cumprido: a IRIS está em produção desde maio/2026. Mantido como registro
+> das decisões de arranque. Para o estado atual, veja o [README](../../README.md)
+> e o [CLAUDE.md](../../CLAUDE.md).
+
 # 02 — Plano de Execução (3 dias)
 
 Premissa: 1 dev (Eduardo + Claude) full-time. ~6-8h efetivas/dia.
@@ -37,7 +43,7 @@ Premissa: 1 dev (Eduardo + Claude) full-time. ~6-8h efetivas/dia.
 - [ ] Habilitar Google Ads API + obter Developer Token
 - [ ] OAuth flow pra refresh token do Ads
 - [ ] Conector Ads (`lib/google-ads.ts`) — cost, clicks, impressions, CPC por dia/campaign
-- [ ] Lógica de matching Ads ↔ GA4 via `utm_campaign` (regras em [03-UTM-CONVENTION](03-UTM-CONVENTION.md))
+- [ ] Lógica de matching Ads ↔ GA4 via `utm_campaign` (regras em [03-UTM-CONVENTION](../03-UTM-CONVENTION.md))
 - [ ] Cards KPI passam a mostrar Custo, CPC, CPL (cost / ctaClicks)
 
 ### Tarde (3-4h)

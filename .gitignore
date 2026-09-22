@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...menos o exemplo: ele nao tem segredo nenhum e e' o que documenta
+# as envs necessarias pra subir o projeto.
+!.env.example
 
 # vercel
 .vercel
