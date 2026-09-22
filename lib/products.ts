@@ -176,7 +176,7 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // (ex.: "M1-PROSP-LOGICA-SET26", "G1-SEARCH-LOGICA-SET26").
     metaCampaignFilter: "LOGICA",
     googleCampaignFilter: "LOGICA",
-    campaignSlug: "logica-setembro-2026",
+    campaignSlug: "logica-outubro-2026",
     // Engaged checkout SharedIDs — presencial + online:
     //   https://impacta.site.engaged.com.br/p/checkout/se22shhnov  (Presencial)
     //   https://impacta.site.engaged.com.br/p/checkout/3je9srypg3  (Online ao vivo)
