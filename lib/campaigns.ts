@@ -113,6 +113,15 @@ export async function getCampaignBySharedId(sharedId: string) {
   try {
     return await prisma.campaign.findFirst({
       where: { engagedCheckoutSharedIds: { has: sharedId } },
+      // O modelo pressupoe sharedId novo por turma, mas REMARCACAO reusa a
+      // mesma vaga do Engaged (ex: claude-pro Turma 5/outubro herdou o
+      // qnwmjm487q da Turma 4/setembro). Nesse caso o sharedId resolve pra N
+      // campanhas e, sem ordenacao, o findFirst podia devolver a turma ENDED —
+      // fazendo o gate `campaign_ended` barrar TODO webhook do checkout, e
+      // nenhum lead/compra da turma vigente entrava.
+      // Prefere a ATIVA; em empate, a turma que comecou por ultimo.
+      // Mesmo criterio de getCampaignByTurmaId/getTurmaBySharedId.
+      orderBy: [{ isActive: "desc" }, { startDate: "desc" }],
     });
   } catch {
     return null;
