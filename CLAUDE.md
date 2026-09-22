@@ -54,8 +54,14 @@ Depois redeploy no Coolify. `GET` no mesmo endpoint faz dry-run (lista aplicadas
 vs pendentes). O endpoint aplica cada migration pendente numa transação e
 registra em `_prisma_migrations` com checksum compatível com o CLI.
 
-Convenção do repo: **migration nova é idempotente** (`IF NOT EXISTS`, guards em
-`DO $$`). O banco de produção foi baselined e já divergiu do histórico no
+⚠️ **Migration aplicada por este endpoint NÃO pode usar `DO $$ ... $$`.** O
+`splitStatements` divide o SQL por `;` e quebra o bloco no meio — o Postgres
+responde `42601 unterminated dollar-quoted string` e a migration inteira aborta
+(aconteceu em 2026-09-22). Para idempotência use só `IF NOT EXISTS`,
+`ALTER INDEX IF EXISTS ... RENAME TO`, e `DROP CONSTRAINT IF EXISTS` seguido de
+`ADD CONSTRAINT`.
+
+Convenção do repo: **migration nova é idempotente**. O banco de produção foi baselined e já divergiu do histórico no
 passado — ver `prisma/migrations/20260601160000_reconcile_baselined_columns` e
 as duas `*_baseline_*` de 2026-08-31. Nunca aplique SQL à mão no Postgres de
 produção; escreva a migration.

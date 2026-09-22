@@ -8,6 +8,10 @@
 -- migrations. Resultado: `prisma migrate deploy` num banco limpo NÃO criava
 -- nada disso. Esta migration reconcilia o histórico com o schema.
 --
+-- SEM blocos DO $$: o /api/admin/migrate divide o SQL por ';' e quebraria o
+-- bloco no meio (erro 42601 unterminated dollar-quoted string). Use só
+-- IF EXISTS / IF NOT EXISTS / DROP+ADD pra idempotência.
+--
 -- É IDEMPOTENTE de propósito: em produção (onde tudo já existe) ela não
 -- altera nada; num banco limpo, cria tudo.
 --
@@ -88,22 +92,8 @@ CREATE TABLE IF NOT EXISTS "AgentRecommendation" (
 -- "..._metric_bucket_startsAt" — diferente do nome canônico que o Prisma
 -- espera ("..._metric_bucket_star_key"). Renomeia o que existir antes de
 -- criar, pra não acabar com DOIS índices iguais de nomes diferentes.
-DO $$
-DECLARE idx TEXT;
-BEGIN
-  SELECT c.relname INTO idx
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE c.relkind = 'i'
-     AND n.nspname = current_schema()
-     AND c.relname LIKE 'CampaignMetricSample_platform_externalId_metric_bucket%'
-     AND c.relname <> 'CampaignMetricSample_platform_externalId_metric_bucket_star_key'
-   LIMIT 1;
-  IF idx IS NOT NULL THEN
-    EXECUTE format('ALTER INDEX %I RENAME TO %I', idx,
-                   'CampaignMetricSample_platform_externalId_metric_bucket_star_key');
-  END IF;
-END $$;
+ALTER INDEX IF EXISTS "CampaignMetricSample_platform_externalId_metric_bucket_startsAt"
+  RENAME TO "CampaignMetricSample_platform_externalId_metric_bucket_star_key";
 
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "TrackedCampaign_active_idx" ON "TrackedCampaign"("active");
@@ -117,15 +107,9 @@ CREATE INDEX IF NOT EXISTS "AgentRecommendation_status_idx" ON "AgentRecommendat
 
 -- AddForeignKey — nunca foi aplicada em produção (o SQL solto só criou a
 -- coluna "campaignId" e o índice, sem a constraint). Postgres não tem
--- "ADD CONSTRAINT IF NOT EXISTS", daí o guard.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'TrackedCampaign_campaignId_fkey'
-  ) THEN
-    ALTER TABLE "TrackedCampaign"
-      ADD CONSTRAINT "TrackedCampaign_campaignId_fkey"
-      FOREIGN KEY ("campaignId") REFERENCES "Campaign"("id")
-      ON DELETE SET NULL ON UPDATE CASCADE;
-  END IF;
-END $$;
+-- "ADD CONSTRAINT IF NOT EXISTS" — DROP IF EXISTS + ADD dá a idempotência.
+ALTER TABLE "TrackedCampaign" DROP CONSTRAINT IF EXISTS "TrackedCampaign_campaignId_fkey";
+ALTER TABLE "TrackedCampaign"
+  ADD CONSTRAINT "TrackedCampaign_campaignId_fkey"
+  FOREIGN KEY ("campaignId") REFERENCES "Campaign"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
