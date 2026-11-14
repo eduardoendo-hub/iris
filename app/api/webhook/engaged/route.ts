@@ -126,6 +126,54 @@ async function removeRdDeal(dealId: string): Promise<boolean> {
 }
 
 /**
+ * Dispara evento Purchase via Meta CAPI (server-side) ao final de uma venda
+ * nova. O Engaged nao dispara pixel client-side na pagina de obrigado, entao
+ * SEM este fire o Meta nao ve Purchase e campanhas Advantage+ otimizam no
+ * escuro (comprovado em prod: 720 begin_checkout em 30d, 0 Purchase no pixel).
+ *
+ * Usa o endpoint /api/pixel/event do integracao-rd (que ja tem CAPI funcional
+ * com hashing de PII). Fire-and-forget: nao bloqueia a resposta do webhook
+ * pro Engaged. Usa sale.id como event_id pra deduplicar caso dispare 2x
+ * (e caso o Engaged passe a ter pixel client no futuro).
+ */
+function firePurchaseCapi(sale: {
+  id: string;
+  productSlug: string;
+  campaignSlug: string | null;
+  customerName: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  amount: unknown; // Prisma Decimal
+  currency: string;
+}): void {
+  const value = Number(sale.amount);
+  if (!Number.isFinite(value) || value <= 0) return;
+  const firstName = (sale.customerName || "").trim().split(/\s+/)[0] || null;
+  const payload = {
+    event_name: "Purchase",
+    event_id: `sale:${sale.id}`,
+    email: sale.customerEmail || null,
+    phone: sale.customerPhone || null,
+    first_name: firstName,
+    value,
+    currency: sale.currency || "BRL",
+    extra: {
+      product_slug: sale.productSlug,
+      campaign_slug: sale.campaignSlug,
+      source: "engaged_webhook",
+    },
+  };
+  fetch(`${INTEGRACAO_RD_URL}/api/pixel/event`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(5000),
+  }).catch((err) => {
+    console.error("[engaged-webhook] firePurchaseCapi falhou:", err instanceof Error ? err.message : err);
+  });
+}
+
+/**
  * Mapeia o `eventType` do Engaged pro status interno do EngagedPurchase.
  * Tabela canonica do Engaged:
  *   purchase.lead_captured                     → DRAFT
@@ -1072,6 +1120,10 @@ export async function processEngagedPayload(rawBody: string): Promise<{
       });
     } else {
       sale = await prisma.sale.create({ data: saleData });
+      // Dispara Purchase no Meta CAPI (server-side) — so em venda nova.
+      // Update de sale existente nao re-dispara (evita duplicacao). Deduplicacao
+      // futura com pixel client (caso Engaged implemente) vem por event_id.
+      firePurchaseCapi(sale);
     }
 
     // Linka EngagedPurchase → Sale (rastreio E2E)
