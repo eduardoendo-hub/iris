@@ -71,15 +71,15 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // Campanha real no Meta: "M1-PROSP-CLAUDEPRO-MAI26" → bate com CONTAIN "CLAUDEPRO"
     metaCampaignFilter: "CLAUDEPRO",
     googleCampaignFilter: "CLAUDEPRO",
-    // Turma vigente = Outubro/2026 (Turma 5, 19–23/10 — remarcacao usando a
-    // mesma vaga Engaged da Turma 4). campaignSlug e' usado no push de lead
-    // DRAFT do Engaged pro RD CRM — tem que apontar pra turma ativa.
-    campaignSlug: "claude-pro-outubro-2026",
-    // sharedId: outubro/setembro reusam a mesma vaga qnwmjm487q (Turma 5 e' remarcacao
-    // da 4). agosto (72rspa5wc8) e maio (x68jpj7w3k) mantidos p/ nao regredir
-    // webhooks em transito de turmas anteriores (campanha ENDED ja barra no
-    // gate do webhook, mas o sharedId ainda serve pra atribuir Sale correto).
-    engagedCheckoutSharedIds: ["qnwmjm487q", "72rspa5wc8", "x68jpj7w3k"],
+    // Turma vigente = Novembro/2026 (Turma 6, 23–27/11 — vaga nova no Engaged:
+    // irihaohzhc). campaignSlug e' usado no push de lead DRAFT do Engaged pro
+    // RD CRM — tem que apontar pra turma ativa.
+    campaignSlug: "claude-pro-novembro-2026",
+    // sharedId: novembro (irihaohzhc) primeiro; outubro/setembro (qnwmjm487q),
+    // agosto (72rspa5wc8) e maio (x68jpj7w3k) mantidos p/ nao regredir webhooks
+    // em transito de turmas anteriores (campanha ENDED ja barra no gate do
+    // webhook, mas o sharedId ainda serve pra atribuir Sale correto).
+    engagedCheckoutSharedIds: ["irihaohzhc", "qnwmjm487q", "72rspa5wc8", "x68jpj7w3k"],
     engagedProductIds: ["6a208a4cccd3d6001cbf58dd", "69fe28452501c7001ca77fe5"],
   },
   "peopleai": {
