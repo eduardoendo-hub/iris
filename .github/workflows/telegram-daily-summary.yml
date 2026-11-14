@@ -16,11 +16,11 @@ jobs:
       - name: Call telegram-daily-summary endpoint
         env:
           IRIS_URL: ${{ secrets.IRIS_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_SECRET: ${{ secrets.IRIS_CRON_SECRET }}
         run: |
           set -euo pipefail
           if [ -z "${IRIS_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
-            echo "faltam secrets IRIS_URL / CRON_SECRET"
+            echo "faltam secrets IRIS_URL / IRIS_CRON_SECRET"
             exit 1
           fi
           http_code=$(curl -sS -o /tmp/out -w "%{http_code}" \
