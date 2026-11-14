@@ -174,6 +174,39 @@ function firePurchaseCapi(sale: {
 }
 
 /**
+ * Alerta Telegram: nova venda confirmada. Fire-and-forget.
+ */
+function fireTelegramNewSale(sale: {
+  id: string;
+  productSlug: string;
+  campaignSlug: string | null;
+  customerName: string;
+  amount: unknown;
+  currency: string;
+}): void {
+  const value = Number(sale.amount);
+  if (!Number.isFinite(value) || value <= 0) return;
+  // Lazy import p/ evitar carregar telegram.ts quando env nao configurada
+  import("@/lib/telegram").then(({ sendTelegramMessage, escapeMd, formatBRL, telegramConfigured }) => {
+    if (!telegramConfigured()) return;
+    const msg = [
+      `🎉 *Nova venda\\!* · ${escapeMd(sale.productSlug.toUpperCase())}`,
+      ``,
+      `👤 ${escapeMd(sale.customerName || "(sem nome)")}`,
+      `💰 ${formatBRL(value)}`,
+      sale.campaignSlug ? `🎯 _${escapeMd(sale.campaignSlug)}_` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    sendTelegramMessage(msg).catch((err) =>
+      console.error("[telegram] new-sale alert failed:", err instanceof Error ? err.message : err)
+    );
+  }).catch((err) =>
+    console.error("[telegram] import failed:", err instanceof Error ? err.message : err)
+  );
+}
+
+/**
  * Mapeia o `eventType` do Engaged pro status interno do EngagedPurchase.
  * Tabela canonica do Engaged:
  *   purchase.lead_captured                     → DRAFT
@@ -1130,6 +1163,9 @@ export async function processEngagedPayload(rawBody: string): Promise<{
       // Update de sale existente nao re-dispara (evita duplicacao). Deduplicacao
       // futura com pixel client (caso Engaged implemente) vem por event_id.
       firePurchaseCapi(sale);
+      // Alerta Telegram (fire-and-forget) — nova venda real pro produto.
+      // So em Sale nova. Nao interrompe o fluxo se Telegram nao configurado.
+      fireTelegramNewSale(sale);
     }
 
     // Linka EngagedPurchase → Sale (rastreio E2E)
@@ -1191,6 +1227,78 @@ async function logWebhook(opts: {
   } catch (err) {
     // logging não deve quebrar o webhook se DB falhar
     console.error("[webhook-log] failed to log:", err);
+  }
+
+  // Alerta Telegram pros outcomes criticos (erro interno, auth falhou,
+  // ou repeticao de validation_failed indica Engaged em panico). Rate limit:
+  // 3+ falhas da mesma classe em 1h pra evitar flood. Fire-and-forget.
+  if (opts.outcome === "error" || opts.outcome === "auth_failed" || opts.outcome === "validation_failed") {
+    fireTelegramWebhookAlert(opts.outcome, opts.reason, opts.externalId).catch((err) =>
+      console.error("[telegram] webhook-alert check failed:", err instanceof Error ? err.message : err)
+    );
+  }
+}
+
+/**
+ * Verifica se ha N+ falhas do mesmo outcome nas ultimas 60min; se sim,
+ * manda alerta Telegram. Dedup: so manda 1 alerta por outcome a cada 60min
+ * (usa webhookLog pra calcular — nao precisa estado extra).
+ */
+async function fireTelegramWebhookAlert(
+  outcome: string,
+  reason: string | undefined,
+  externalId: string | undefined
+): Promise<void> {
+  const THRESHOLD = 3;
+  const WINDOW_MIN = 60;
+  const since = new Date(Date.now() - WINDOW_MIN * 60_000);
+
+  const count = await prisma.webhookLog.count({
+    where: { source: "engaged", outcome, receivedAt: { gte: since } },
+  });
+  if (count < THRESHOLD) return;
+
+  // dedup: so manda se nao mandou alerta igual na ultima hora. Usa um webhookLog
+  // sintetico marcado com reason "[telegram-alert]:${outcome}" como flag.
+  const alertFlag = `[telegram-alert]:${outcome}`;
+  const lastAlert = await prisma.webhookLog.findFirst({
+    where: { source: "engaged", reason: alertFlag, receivedAt: { gte: since } },
+    select: { id: true },
+  });
+  if (lastAlert) return;
+
+  const { sendTelegramMessage, escapeMd, telegramConfigured } = await import("@/lib/telegram");
+  if (!telegramConfigured()) return;
+
+  const msg = [
+    `🚨 *Webhook Engaged em pânico*`,
+    ``,
+    `Outcome: \`${escapeMd(outcome)}\``,
+    `Ocorrências na última ${WINDOW_MIN}min: *${count}*`,
+    reason ? `Razão: _${escapeMd(reason.slice(0, 200))}_` : "",
+    externalId ? `Último externalId: \`${escapeMd(externalId)}\`` : "",
+    ``,
+    escapeMd("Investigue: /api/debug/webhooks?outcome=" + outcome),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const r = await sendTelegramMessage(msg);
+  if (r.ok) {
+    // persiste flag de dedup
+    await prisma.webhookLog
+      .create({
+        data: {
+          source: "engaged",
+          headers: {},
+          rawBody: "",
+          statusCode: 0,
+          resultJson: { alert: outcome, count } as never,
+          outcome: "telegram_alert_sent",
+          reason: alertFlag,
+        },
+      })
+      .catch(() => {});
   }
 }
 
