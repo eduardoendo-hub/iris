@@ -104,7 +104,10 @@ export function buildRecoveryLink(opts: {
   url.searchParams.set("utm_medium", "recovery");
   if (opts.campaignSlug) url.searchParams.set("utm_campaign", opts.campaignSlug);
   url.searchParams.set("utm_content", `step${opts.step}`);
-  if (opts.step === 3 && opts.voucherCode) url.searchParams.set("voucher_code", opts.voucherCode);
+  // Voucher anexado em TODO step quando presente (antes era so step 3).
+  // Pro claude-pro (que tem cupom permanente CLAUDE20), isso garante que
+  // qualquer link de recovery ja leva pro checkout com desconto aplicado.
+  if (opts.voucherCode) url.searchParams.set("voucher_code", opts.voucherCode);
   return url.toString();
 }
 

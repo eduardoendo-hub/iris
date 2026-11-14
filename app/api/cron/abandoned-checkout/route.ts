@@ -79,7 +79,9 @@ export async function GET(req: NextRequest) {
 
   const maxPerRun = Number(process.env.RECOVERY_MAX_PER_RUN || 20);
   const maxAgeDays = Number(process.env.RECOVERY_MAX_AGE_DAYS || 7);
-  const voucher = process.env.RECOVERY_VOUCHER_CODE || null;
+  // Voucher default (env) — fallback pra produtos sem `recoveryVoucher` no
+  // products.ts. Product-specific tem prioridade (ver loop abaixo).
+  const envVoucher = process.env.RECOVERY_VOUCHER_CODE || null;
   const now = Date.now();
 
   // 1) Campanhas ativas com checkout Engaged
@@ -132,6 +134,10 @@ export async function GET(req: NextRequest) {
     const productSlug = campaign.productSlug;
     const product = getProductConfig(productSlug);
     const courseName = product?.name || productSlug;
+    // Voucher product-specific (ex: claude-pro → CLAUDE20) tem prioridade
+    // sobre o env global. Quando presente, e' anexado em TODO step do link
+    // e o texto da mensagem ganha uma linha explicita mencionando o cupom.
+    const voucher = product?.recoveryVoucher || envVoucher;
 
     // 2) Candidatos + quem já pagou (pra filtrar)
     const [candidates, paidEngaged, sales] = await Promise.all([
@@ -217,10 +223,19 @@ export async function GET(req: NextRequest) {
         link,
         cupom: voucher || undefined,
       };
-      const message = renderText(
+      const baseMessage = renderText(
         cfg?.fallbackText || DEFAULT_TEMPLATE_TEXTS[templateKey],
         vars
       );
+      // Anexa linha de cupom quando ha voucher product-specific (ex: CLAUDE20
+      // pro claude-pro). O {link} ja leva ?voucher_code=X pre-aplicado via
+      // buildRecoveryLink, so reforcamos textualmente pra pessoa saber que o
+      // desconto esta la sem precisar digitar nada. Pro step 3 com cupom
+      // (template step3_com_cupom), o cupom ja aparece no corpo — nao duplica.
+      const message =
+        voucher && !baseMessage.includes(voucher)
+          ? `${baseMessage}\n\n💡 Cupom *${voucher}* já aplicado no link acima — desconto automático no checkout.`
+          : baseMessage;
       const chatproTemplate = cfg?.chatproTemplate ?? null;
       const tplParams = chatproTemplate
         ? (cfg?.params ?? []).map((p) => paramValue(p, vars))

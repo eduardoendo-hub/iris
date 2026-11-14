@@ -61,6 +61,15 @@ export type ProductConfig = {
    * esse produto. Alternativa/complemento ao sharedId pra filtrar.
    */
   engagedProductIds?: string[];
+
+  /**
+   * Codigo de cupom (voucher_code do Engaged) a ser usado no recovery de
+   * checkout abandonado DESSE produto. Quando setado, o cron de recovery
+   * anexa ?voucher_code=X em TODO step (nao so step 3) e o texto da msg
+   * menciona o cupom. Diferente do env RECOVERY_VOUCHER_CODE (que vale
+   * pra TODOS os produtos) — esse campo e product-scoped.
+   */
+  recoveryVoucher?: string;
 };
 
 export const PRODUCTS: Record<string, ProductConfig> = {
@@ -81,6 +90,9 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // webhook, mas o sharedId ainda serve pra atribuir Sale correto).
     engagedCheckoutSharedIds: ["irihaohzhc", "qnwmjm487q", "72rspa5wc8", "x68jpj7w3k"],
     engagedProductIds: ["6a208a4cccd3d6001cbf58dd", "69fe28452501c7001ca77fe5"],
+    // Cupom vigente — anexado em TODO step do recovery via buildRecoveryLink.
+    // Trocar se mudar a campanha de desconto; remover se cupom sair do ar.
+    recoveryVoucher: "CLAUDE20",
   },
   "peopleai": {
     slug: "peopleai",
