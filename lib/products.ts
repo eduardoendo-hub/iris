@@ -188,11 +188,13 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // (ex.: "M1-PROSP-LOGICA-SET26", "G1-SEARCH-LOGICA-SET26").
     metaCampaignFilter: "LOGICA",
     googleCampaignFilter: "LOGICA",
-    campaignSlug: "logica-outubro-2026",
-    // Engaged checkout SharedIDs — presencial + online:
-    //   https://impacta.site.engaged.com.br/p/checkout/se22shhnov  (Presencial)
-    //   https://impacta.site.engaged.com.br/p/checkout/3je9srypg3  (Online ao vivo)
-    engagedCheckoutSharedIds: ["se22shhnov", "3je9srypg3"],
+    campaignSlug: "logica-dez26-jan27",
+    // Engaged checkout SharedIDs — turmas 100% online (dez/26–jan/27) primeiro;
+    // presencial/online antigos mantidos p/ nao regredir webhooks em transito:
+    //   46a86iqmg6  online semana 01/12/2026 (turma Impacta 174781)
+    //   5o8waiplco  online semana 11/01/2027 (turma Impacta 175789)
+    //   ktbnykimbw  online sabado 09/01/2027 (turma Impacta 175787)
+    engagedCheckoutSharedIds: ["46a86iqmg6", "5o8waiplco", "ktbnykimbw", "se22shhnov", "3je9srypg3"],
   },
 
   "corporativo": {
