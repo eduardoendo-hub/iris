@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
 
   // Linha 4: link dashboard + contador P2/P3
   const nExtras = recs.filter((r) => r?.action).length - (p1 ? 1 : 0);
-  const extrasLabel = nExtras > 0 ? ` · _\\+${nExtras} ${escapeMd("ação" + (nExtras === 1 ? "" : "ões"))}_` : "";
+  const extrasLabel = nExtras > 0 ? ` · _\\+${nExtras} ${escapeMd(nExtras === 1 ? "ação" : "ações")}_` : "";
   const dashUrl = `${DASHBOARD_URL.replace(/\/$/, "")}/?product=${productFilter}`;
   const l4 = `[${escapeMd("Análise")}](${dashUrl})${extrasLabel}`;
 
