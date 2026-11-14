@@ -84,11 +84,30 @@ export const PRODUCTS: Record<string, ProductConfig> = {
     // irihaohzhc). campaignSlug e' usado no push de lead DRAFT do Engaged pro
     // RD CRM — tem que apontar pra turma ativa.
     campaignSlug: "claude-pro-novembro-2026",
-    // sharedId: novembro (irihaohzhc) primeiro; outubro/setembro (qnwmjm487q),
-    // agosto (72rspa5wc8) e maio (x68jpj7w3k) mantidos p/ nao regredir webhooks
-    // em transito de turmas anteriores (campanha ENDED ja barra no gate do
-    // webhook, mas o sharedId ainda serve pra atribuir Sale correto).
-    engagedCheckoutSharedIds: ["irihaohzhc", "qnwmjm487q", "72rspa5wc8", "x68jpj7w3k"],
+    // sharedId: deve listar TODAS as turmas (ativas, passadas e FUTURAS) pra
+    // o webhook /api/webhook/engaged reconhecer o produto. Sem o sharedId
+    // listado aqui, o webhook e marcado como product_not_tracked e Sale nao
+    // e criada (fire CAPI nao dispara).
+    //
+    // Ordem atual:
+    //   irihaohzhc  — Turma 6 novembro/2026 (ATIVA)
+    //   pme7mgmva3  — Turma 7 dezembro/2026 (AGENDADA, switch em 28/11)
+    //   dmwpssa6l5  — Turma 8 janeiro/2027  (AGENDADA, switch em 19/12)
+    //   qnwmjm487q  — outubro/setembro/2026 (ENDED, mantido p/ nao regredir
+    //                 webhooks de vendas atrasadas)
+    //   72rspa5wc8  — agosto/2026 (ENDED)
+    //   x68jpj7w3k  — maio/2026   (ENDED)
+    //
+    // Pra adicionar nova turma futura: edite esse array ANTES de a turma
+    // comecar a receber trafego, senao a primeira compra e perdida pelo gate.
+    engagedCheckoutSharedIds: [
+      "irihaohzhc",
+      "pme7mgmva3",
+      "dmwpssa6l5",
+      "qnwmjm487q",
+      "72rspa5wc8",
+      "x68jpj7w3k",
+    ],
     engagedProductIds: ["6a208a4cccd3d6001cbf58dd", "69fe28452501c7001ca77fe5"],
     // Cupom vigente — anexado em TODO step do recovery via buildRecoveryLink.
     // Trocar se mudar a campanha de desconto; remover se cupom sair do ar.
