@@ -495,16 +495,22 @@ function pickAmount(p: Parsed): number {
   //    PRIORIDADE: paidAmount > totalAmount (apos desconto) > invoiceTotalAmount
   //    NUNCA usar discountedAmount sozinho — esse eh o VALOR DO DESCONTO,
   //    nao o pago. Ja deu bug em prod confundindo desconto com receita.
+  //
+  //    IMPORTANTE: Engaged pode enviar paidAmount=0 em webhook purchase.paid
+  //    (visto em prod 2026-11-14) — nao usar ?? aqui (nullish coalescing
+  //    aceita 0 e pula os fallbacks). Pegar o primeiro candidato POSITIVO.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invAny = (p.invoice ?? {}) as Record<string, any>;
-  const cents =
-    invAny.paidAmount ??
-    invAny.totalAmount ??
-    p.checkout?.invoiceTotalAmount ??
-    p.checkout?.invoiceItemsAmount ??
-    invAny.discountedAmount ?? // fallback final (legado)
-    0;
-  if (cents > 0) return Number(cents) / 100;
+  const candidates = [
+    invAny.paidAmount,
+    invAny.totalAmount,
+    p.checkout?.invoiceTotalAmount,
+    p.checkout?.invoiceItemsAmount,
+    invAny.itemsAmount,
+    invAny.discountedAmount, // fallback final (legado)
+  ];
+  const cents = candidates.find((c) => Number(c) > 0) ?? 0;
+  if (Number(cents) > 0) return Number(cents) / 100;
 
   return 0;
 }
