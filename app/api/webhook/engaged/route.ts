@@ -26,6 +26,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { PRODUCTS, getProductConfig, type ProductConfig } from "@/lib/products";
 import { promoteSiblingLeadsToPaid } from "@/lib/engaged-dedup";
+import { forwardToMatriculaPortal, isMbaMatriculaPayload } from "@/lib/matricula-portal";
 import {
   getCampaignBySharedId,
   getCampaignByTurmaId,
@@ -855,6 +856,16 @@ export async function processEngagedPayload(rawBody: string): Promise<{
     matchedProduct = getProductConfig(campaign.productSlug);
   }
   if (!matchedProduct) {
+    // Taxa de Matricula do MBA: o IRIS nao acompanha como produto, mas repassa
+    // o evento ao portal de documentos da matricula (libera o envio pra quem
+    // pagou). Fire-and-forget: nunca atrasa nem quebra a resposta ao Engaged.
+    if (isMbaMatriculaPayload(json)) {
+      forwardToMatriculaPortal(rawBody).then((r) => {
+        if (!r.ok && r.detail !== "not_configured") {
+          console.error(`[engaged-webhook] repasse ao portal da matricula falhou (status=${r.status ?? "-"} ${r.detail ?? ""})`);
+        }
+      });
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ck = (p.checkout ?? {}) as Record<string, any>;
     const desc = typeof ck.description === "string" ? ck.description : "unknown";
