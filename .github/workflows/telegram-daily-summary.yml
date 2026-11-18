@@ -1,12 +1,13 @@
 name: Telegram daily summary
 
-# Chama /api/cron/telegram-daily-summary todo dia as 8:03 BRT (= 11:03 UTC).
-# O endpoint le o ultimo DailyInsight ja gerado pelo cron Coolify das 5h BRT
-# e envia o resumo pro Telegram configurado nas env vars do IRIS.
+# Chama /api/cron/telegram-daily-summary e envia o resumo pro Telegram configurado nas env vars do IRIS.
+# O endpoint le o ultimo DailyInsight ja gerado pelo cron Coolify das 5h BRT.
+#
+# Sem 'schedule': o agendamento do GitHub atrasava horas (16 e 17/11 sairam a tarde; 18/11 nao saiu).
+# O disparo das 8h BRT vem da tarefa agendada do Claude (mkt-mba-resumo-telegram) com
+# `gh workflow run telegram-daily-summary.yml`, que roda na hora.
 
 on:
-  schedule:
-    - cron: '3 11 * * *'
   workflow_dispatch: {}
 
 jobs:
